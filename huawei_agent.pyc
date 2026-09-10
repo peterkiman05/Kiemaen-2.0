@@ -1,0 +1,48 @@
+Python
+
+
+import os
+import math
+from google import genai
+from google.genai import types
+
+# Initialize Gemini Client
+client = genai.Client()
+
+# Local Knowledge Base (RAG Data)
+LOCAL_KNOWLEDGE = {
+    "Project Pegasus": "Server IP: 192.168.1.150, Port: 8080, Protocol: gRPC",
+    "Database Config": "Primary DB: PostgreSQL, Secret Key: HYDRA_8891_SEC",
+    "Kiemaen Arch": "Microservices built with Rust and Python automation."
+}
+
+def search_local_docs(query: str) -> str:
+    """Searches Kiemaen's private local documents for project info."""
+    results = [f"{k}: {v}" for k, v in LOCAL_KNOWLEDGE.items() if query.lower() in k.lower() or query.lower() in v.lower()]
+    return "\n".join(results) if results else "No matching private documents found."
+
+def execute_python_calc(expression: str) -> str:
+    """Executes mathematical calculations safely."""
+    try:
+        allowed_names = {"math": math, "sqrt": math.sqrt, "pow": pow, "abs": abs}
+        result = eval(expression, {"__builtins__": None}, allowed_names)
+        return f"Calculation Result: {result}"
+    except Exception as e:
+        return f"Error executing calculation: {str(e)}"
+
+def run_agent(prompt: str):
+    print(f"\nUser: {prompt}\n" + "-"*40)
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            tools=[search_local_docs, execute_python_calc],
+            temperature=0,
+        )
+    )
+    print(f"Agent Response:\n{response.text}")
+
+if __name__ == "__main__":
+    run_agent("Find the IP ad
+0
+

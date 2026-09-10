@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cashflow Multi-Agent Engine</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+    .container { max-width: 900px; margin: auto; }
+    h1 { color: #38bdf8; text-align: center; margin-bottom: 25px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px; margin-bottom: 30px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .card h3 { margin-top: 0; color: #f1f5f9; font-size: 1.1rem; }
+    input, button { width: 100%; padding: 10px; margin-top: 8px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; }
+    button { background: #0284c7; font-weight: bold; cursor: pointer; border: none; margin-top: 12px; transition: 0.2s; }
+    button:hover { background: #0369a1; }
+    .history-section { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; }
+    .history-item { border-bottom: 1px solid #334155; padding: 12px 0; }
+    .history-item:last-child { border-bottom: none; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+    .badge-success { background: #15803d; color: #dcfce7; }
+    .badge-failed { background: #b91c1c; color: #fee2e2; }
+    pre { background: #0f172a; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚡ Cashflow Agent Control Engine</h1>
+
+    <div class="grid">
+      <!-- Blueprint 1 -->
+      <div class="card">
+        <h3>📈 Trading Strategy</h3>
+        <input type="text" id="trade-asset" value="XAUUSD" placeholder="Asset (e.g. XAUUSD)">
+        <input type="text" id="trade-timeframe" value="15m" placeholder="Timeframe">
+        <input type="text" id="trade-style" value="Breakout Momentum" placeholder="Style">
+        <button onclick="runBlueprint('trading-strategy', {asset_class: val('trade-asset'), timeframe: val('trade-timeframe'), strategy_style: val('trade-style')})">Run Trading Agent</button>
+      </div>
+
+      <!-- Blueprint 2 -->
+      <div class="card">
+        <h3>🛒 E-Com Arbitrage</h3>
+        <input type="text" id="arb-source" value="Supplier A" placeholder="Source Platform">
+        <input type="text" id="arb-target" value="Zoey" placeholder="Target Platform">
+        <input type="text" id="arb-category" value="Electronics" placeholder="Category">
+        <button onclick="runBlueprint('arbitrage', {source_platform: val('arb-source'), target_platform: val('arb-target'), category: val('arb-category')})">Run Arbitrage Agent</button>
+      </div>
+
+      <!-- Blueprint 3 -->
+      <div class="card">
+        <h3>🎯 B2B Lead Gen</h3>
+        <input type="text" id="lead-niche" value="Civil Engineering Consultants" placeholder="Target Niche">
+        <input type="text" id="lead-loc" value="Johannesburg" placeholder="Location">
+        <input type="text" id="lead-offer" value="Automated calculation tool" placeholder="Offer Summary">
+        <button onclick="runBlueprint('leadgen', {target_niche: val('lead-niche'), location: val('lead-loc'), offer_summary: val('lead-offer')})">Run LeadGen Agent</button>
+      </div>
+    </div>
+
+    <div class="history-section">
+      <h3>📜 Execution History Logs</h3>
+      <button onclick="loadHistory()" style="width: auto; padding: 6px 14px; margin-bottom: 10px;">Refresh Logs</button>
+      <div id="history-container">Loading execution history...</div>
+    </div>
+  </div>
+
+  <script>
+    const val = (id) => document.getElementById(id).value;
+
+    async function runBlueprint(endpoint, payload) {
+      alert("Pipeline initiated. Processing worker-reviewer loop in background...");
+      try {
+        const res = await fetch(`/blueprints/${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        alert(`Finished: ${data.status}`);
+        loadHistory();
+      } catch (err) {
+        alert("Execution error: " + err);
+      }
+    }
+
+    async function loadHistory() {
+      try {
+        const res = await fetch('/history');
+        const data = await res.json();
+        const container = document.getElementById('history-container');
+        if (!data.length) { container.innerHTML = "<p>No runs recorded yet.</p>"; return; }
+
+        container.innerHTML = data.reverse().map(item => `
+          <div class="history-item">
+            <div>
+              <strong>${item.task}</strong> 
+              <span class="badge ${item.status === 'SUCCESS' ? 'badge-success' : 'badge-failed'}">${item.status}</span>
+              <small style="color:#94a3b8; margin-left: 10px;">${new Date(item.timestamp).toLocaleString()}</small>
+            </div>
+            <pre><code>${item.final_output}</code></pre>
+          </div>
+        `).join('');
+      } catch (err) {
+        document.getElementById('history-container').innerText = "Failed to load history.";
+      }
+    }
+
+    loadHistory();
+  </script>
+</body>
+</html>

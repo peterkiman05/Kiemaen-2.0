@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kiemaen AI Dashboard</title>
+  <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+  <link rel="stylesheet" href="[https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css](https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css)">
+  <script defer src="[https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js](https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js)"></script>
+  <script defer src="[https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js](https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js)" onload="renderMathInElement(document.body);"></script>
+  <script src="[https://cdn.jsdelivr.net/npm/marked/marked.min.js](https://cdn.jsdelivr.net/npm/marked/marked.min.js)"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col">
+  <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+    <div class="flex items-center gap-3">
+      <div class="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></div>
+      <h1 class="text-xl font-bold tracking-wide">Kiemaen AI Enterprise</h1>
+    </div>
+    <div id="telemetry" class="flex gap-6 text-sm text-slate-300">
+      <div>Status: <span id="status" class="text-emerald-400 font-medium">Checking...</span></div>
+      <div>CPUs: <span id="cpu-count" class="font-medium">-</span></div>
+      <div>Active Tasks: <span id="active-tasks" class="font-medium">-</span></div>
+      <div>RAG Chunks: <span id="rag-chunks" class="font-medium">-</span></div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Left Column: Knowledge Base & Settings -->
+    <div class="space-y-6">
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <h2 class="text-lg font-semibold mb-3 text-slate-200">Document Ingestion</h2>
+        <input type="text" id="namespace-input" value="default" placeholder="Namespace (e.g. SMC2B21)" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 mb-3 focus:outline-none focus:border-indigo-500">
+        <div class="border-2 border-dashed border-slate-600 rounded-lg p-6 text-center hover:border-indigo-500 transition-colors cursor-pointer" id="drop-zone">
+          <input type="file" id="file-input" class="hidden" accept=".pdf,.docx,.txt,.csv" />
+          <p class="text-sm text-slate-400 mb-1">Drag & drop or click to upload</p>
+          <span class="text-xs text-slate-500">PDF, DOCX, TXT, CSV</span>
+        </div>
+        <div id="upload-status" class="mt-2 text-xs text-slate-400"></div>
+      </div>
+
+      <!-- Knowledge Base Manager -->
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-lg font-semibold text-slate-200">Knowledge Base</h2>
+          <button onclick="fetchDocs()" class="text-xs text-indigo-400 hover:text-indigo-300">Refresh</button>
+        </div>
+        <div id="doc-list" class="space-y-2 max-h-48 overflow-y-auto text-xs">
+          <div class="text-slate-500">Loading documents...</div>
+        </div>
+      </div>
+
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <h2 class="text-lg font-semibold mb-3 text-slate-200">Execution Settings</h2>
+        <label class="block text-xs text-slate-400 mb-1">API Key</label>
+        <input type="password" id="api-key" value="kiemaen-secret-key-2026" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 mb-3 focus:outline-none focus:border-indigo-500">
+        
+        <label class="block text-xs text-slate-400 mb-1">Max Iterations</label>
+        <input type="number" id="max-iterations" value="2" min="1" max="5" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+      </div>
+    </div>
+
+    <!-- Right Column: Interactive Query Workspace -->
+    <div class="md:col-span-2 flex flex-col bg-slate-800 rounded-xl border border-slate-700 h-[650px]">
+      <div id="chat-window" class="flex-1 p-5 overflow-y-auto space-y-4">
+        <div class="bg-slate-700/50 p-4 rounded-lg border border-slate-600 text-sm text-slate-300">
+          Agent Matrix operational. Python charting (Matplotlib) and RAG namespace search enabled.
+        </div>
+      </div>
+      <div class="p-4 border-t border-slate-700 flex gap-2">
+        <input type="text" id="query-input" placeholder="Type query or Python request (e.g., 'plot a sine wave')..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+        <button id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 px-5 py-3 rounded-lg text-sm font-medium transition-colors">Submit</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const apiKeyInput = document.getElementById('api-key');
+
+    async function fetchTelemetry() {
+      try {
+        const res = await fetch('/api/telemetry', {
+          headers: { 'X-API-Key': apiKeyInput.value }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('status').innerText = data.status.toUpperCase();
+          document.getElementById('cpu-count').innerText = data.cpu_count;
+          document.getElementById('active-tasks').innerText = data.active_async_tasks;
+          document.getElementById('rag-chunks').innerText = data.total_rag_chunks;
+        }
+      } catch (e) {
+        document.getElementById('status').innerText = 'OFFLINE';
+      }
+    }
+
+    async function fetchDocs() {
+      const docListEl = document.getElementById('doc-list');
+      try {
+        const res = await fetch('/rag/documents', {
+          headers: { 'X-API-Key': apiKeyInput.value }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.documents.length === 0) {
+            docListEl.innerHTML = '<div class="text-slate-500">No documents indexed.</div>';
+            return;
+          }
+          docListEl.innerHTML = data.documents.map(d => `
+            <div class="flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-700">
+              <div>
+                <div class="font-medium text-slate-300">${d.filename}</div>
+                <div class="text-[10px] text-slate-500">ns: ${d.namespace} | chunks: ${d.chunks}</div>
+              </div>
+              <button onclick="deleteDoc('${d.filename}')" class="text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+            </div>
+          `).join('');
+        }
+      } catch (e) {
+        docListEl.innerHTML = '<div class="text-rose-400">Failed to load docs.</div>';
+      }
+    }
+
+    async function deleteDoc(filename) {
+      if (!confirm(`Delete ${filename}?`)) return;
+      try {
+        await fetch(`/rag/documents/${encodeURIComponent(filename)}`, {
+          method: 'DELETE',
+          headers: { 'X-API-Key': apiKeyInput.value }
+        });
+        fetchDocs();
+        fetchTelemetry();
+      } catch (e) {
+        alert('Delete failed.');
+      }
+    }
+
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleUpload(e.target.files[0]));
+
+    async function handleUpload(file) {
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('namespace', document.getElementById('namespace-input').value || 'default');
+
+      const statusEl = document.getElementById('upload-status');
+      statusEl.innerText = 'Indexing...';
+
+      try {
+        const res = await fetch('/rag/ingest', {
+          method: 'POST',
+          headers: { 'X-API-Key': apiKeyInput.value },
+          body: formData
+        });
+        const data = await res.json();
+        statusEl.innerText = data.message || 'Complete.';
+        fetchTelemetry();
+        fetchDocs();
+      } catch (e) {
+        statusEl.innerText = 'Upload failed.';
+      }
+    }
+
+    document.getElementById('send-btn').addEventListener('click', runTask);
+    async function runTask() {
+      const input = document.getElementById('query-input');
+      const task = input.value.trim();
+      if (!task) return;
+
+      const chatWindow = document.getElementById('chat-window');
+      chatWindow.innerHTML += `<div class="bg-indigo-900/40 border border-indigo-700/50 p-4 rounded-lg text-sm text-indigo-200"><strong>User:</strong> ${task}</div>`;
+      input.value = '';
+
+      try {
+        const res = await fetch('/run_blueprint', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKeyInput.value
+          },
+          body: JSON.stringify({
+            task: task,
+            max_iterations: parseInt(document.getElementById('max-iterations').value)
+          })
+        });
+        const data = await res.json();
+        
+        const rawOutput = data.final_output || data.detail || 'No output.';
+        const parsedHtml = marked.parse(rawOutput);
+
+        chatWindow.innerHTML += `<div class="bg-slate-700/50 p-4 rounded-lg border border-slate-600 text-sm text-slate-200"><strong>Agent (${data.model_used || 'system'}):</strong><br><div class="mt-2 text-slate-100">${parsedHtml}</div></div>`;
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        
+        if (window.renderMathInElement) {
+          renderMathInElement(chatWindow);
+        }
+      } catch (e) {
+        chatWindow.innerHTML += `<div class="bg-rose-900/40 border border-rose-700 p-4 rounded-lg text-sm text-rose-200">Error: ${e}</div>`;
+      }
+    }
+
+    setInterval(fetchTelemetry, 5000);
+    fetchTelemetry();
+    fetchDocs();
+  </script>
+</body>
+</html>

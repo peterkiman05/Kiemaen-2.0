@@ -1,0 +1,1 @@
+SMC2B21 beam lab test requires a maximum deflection threshold of 2.5mm.
