@@ -6,8 +6,7 @@ from langgraph.graph import StateGraph, END
 import ollama
 import time
 import logging
-<<<<<<< HEAD
-=======
+ HEAD
 
 # 1. Initialize FastAPI Application FIRST
 app = FastAPI(title="Multi-Engine Self-Evolving AI Backend")
@@ -410,7 +409,4 @@ async def serve_frontend():
 </body>
 </html>
     """
-<<<<<<< HEAD
-=======
-
->>>>>>> 3587d41 (Update frontend interface to Kiemaen AI with complete feature toolbar)
+< HEAD> 3587d41 (Update frontend interface to Kiemaen AI with complete feature toolbar>
