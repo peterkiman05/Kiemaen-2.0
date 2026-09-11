@@ -6,7 +6,7 @@ cffi==2.1.1
 charset-normalizer==3.4.9
 click==8.4.2
 contourpy
-cryptography @ file:///home/builder/.termux-build/python-cryptography/src
+cryptography
 cycler==0.12.1
 distro==1.9.0
 fastapi==0.141.1
