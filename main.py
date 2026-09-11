@@ -143,7 +143,7 @@ try:
         tutor, freelance, auth, firewall, integration, rate_limiter, 
         ddos_defense, code_verifier, hash_verifier, pkce_verifier, 
         rls_enforcer, rls_policies, tool_connectors, messaging_channels, token_generator
-    ]
+    )
     for router_module in [
         legal, monetization, chat, evolution, frontend, security, 
         tutor, freelance, auth, firewall, integration, rate_limiter, 
