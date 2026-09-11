@@ -4,6 +4,93 @@ from pydantic import BaseModel
 from typing import List, Dict, Any
 from langgraph.graph import StateGraph, END
 import ollama
+from fastapi.responses import HTMLResponse
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    return """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiemaen AI</title>
+    <style>
+        :root { background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        header { padding: 1rem 2rem; background: #1e293b; border-bottom: 1px solid #334155; font-size: 1.25rem; font-weight: bold; }
+        .chat-container { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-width: 800px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+        .message { padding: 0.75rem 1rem; border-radius: 0.5rem; max-width: 70%; line-height: 1.5; word-break: break-word; }
+        .user { background: #3b82f6; align-self: flex-end; }
+        .assistant { background: #334155; align-self: flex-start; }
+        .toolbar { display: flex; gap: 0.5rem; padding: 0.5rem 1.5rem; max-width: 800px; margin: 0 auto; width: 100%; box-sizing: border-box; overflow-x: auto; }
+        .tool-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; font-size: 0.85rem; padding: 0.4rem 0.8rem; border-radius: 0.375rem; cursor: pointer; white-space: nowrap; }
+        .tool-btn:hover { background: #475569; }
+        .input-panel { padding: 1rem; background: #1e293b; border-top: 1px solid #334155; display: flex; gap: 0.5rem; max-width: 800px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+        textarea { flex: 1; background: #0f172a; border: 1px solid #475569; color: #f8fafc; padding: 0.75rem; border-radius: 0.375rem; resize: none; height: 24px; font-family: inherit; }
+        button.send-btn { background: #3b82f6; color: white; border: none; padding: 0.75rem 1.25rem; border-radius: 0.375rem; cursor: pointer; font-weight: 600; }
+        button.send-btn:hover { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <header>Kiemaen AI</header>
+    <div class="chat-container" id="chatBox">
+        <div class="message assistant">Hello! I am Kiemaen AI. How can I assist you today?</div>
+    </div>
+    <div class="toolbar">
+        <button class="tool-btn" onclick="triggerUpload()">📁 Upload</button>
+        <button class="tool-btn" onclick="triggerCopy()">📋 Copy Last</button>
+        <button class="tool-btn" onclick="toggleRecord()">🎙️ Record</button>
+        <button class="tool-btn" onclick="toggleSpeechToSpeech()">🔊 Speech-to-Speech</button>
+    </div>
+    <div class="input-panel">
+        <textarea id="userInput" placeholder="Message Kiemaen AI..." rows="1" onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" onclick="sendMessage()">Send</button>
+    </div>
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            appendMessage(text, 'user');
+            input.value = '';
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await response.json();
+                appendMessage(data.reply || data.response || "Received response.", 'assistant');
+            } catch (err) {
+                appendMessage("Error connecting to server.", 'assistant');
+            }
+        }
+        function appendMessage(text, sender) {
+            const box = document.getElementById('chatBox');
+            const div = document.createElement('div');
+            div.className = `message ${sender}`;
+            div.textContent = text;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+        function handleKey(e) { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+        function triggerUpload() { alert("File upload tool triggered."); }
+        function triggerCopy() { 
+            const messages = document.querySelectorAll('.message.assistant');
+            if (messages.length > 0) {
+                navigator.clipboard.writeText(messages[messages.length - 1].textContent);
+                alert("Copied last response to clipboard.");
+            }
+        }
+        function toggleRecord() { alert("Audio recording toggled."); }
+        function toggleSpeechToSpeech() { alert("Speech-to-speech mode toggled."); }
+    </script>
+</body>
+</html>
+    """
 
 app = FastAPI(title="Multi-Engine Self-Evolving AI Backend")
 
