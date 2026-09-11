@@ -73,3 +73,6 @@ websockets==16.1.1
 wheel==0.47.0
 xxhash==4.0.1
 zstandard==0.25.0
+pytest
+pytest-asyncio
+aiosqlite
