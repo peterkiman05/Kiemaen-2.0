@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
