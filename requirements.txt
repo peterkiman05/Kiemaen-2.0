@@ -5,7 +5,7 @@ certifi==2026.7.22
 cffi==2.1.1
 charset-normalizer==3.4.9
 click==8.4.2
-contourpy @ file:///home/builder/.termux-build/python-contourpy/src/dist/contourpy-1.3.3-cp314-cp314-android_aarch64.whl#sha256=f11e072c913ecfd663fcd93e5c8237f5e0aad8fcc85abaa62095906c79f436c5
+contourpy
 cryptography @ file:///home/builder/.termux-build/python-cryptography/src
 cycler==0.12.1
 distro==1.9.0
