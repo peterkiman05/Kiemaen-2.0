@@ -124,6 +124,78 @@
     </style>
 </head>
 <body>
+
+    <!-- Google Identity Services Script -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        #auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 15, 25, 0.95);
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            gap: 24px;
+        }
+        .auth-card {
+            background: #131b2e;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            padding: 40px;
+            border-radius: 24px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            max-width: 400px;
+            width: 90%;
+        }
+        .auth-logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #38bdf8;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+        .auth-sub {
+            color: #9ca3af;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+    </style>
+
+    <div id="auth-overlay">
+        <div class="auth-card">
+            <div class="auth-logo">KIM // GEMINI HUD</div>
+            <div class="auth-sub">Sign in with your Google account to access your tactical workspace.</div>
+            <div id="g_id_onload"
+                 data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+                 data-callback="handleCredentialResponse"
+                 data-auto_prompt="false">
+            </div>
+            <div class="g_id_signin"
+                 data-type="standard"
+                 data-shape="pill"
+                 data-theme="filled_black"
+                 data-text="sign_in_with"
+                 data-size="large"
+                 data-logo_alignment="left">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function handleCredentialResponse(response) {
+            console.log("Encoded JWT ID token: " + response.credential);
+            // Hide login overlay upon successful authentication
+            document.getElementById("auth-overlay").style.display = "none";
+            localStorage.setItem("kim_token", response.credential);
+        }
+    </script>
+
     <div class="hud-header">
         <div style="font-weight: bold; letter-spacing: 1px; color: #38bdf8;">GEMINI HUD</div>
         <div class="gem-selector-pill">
