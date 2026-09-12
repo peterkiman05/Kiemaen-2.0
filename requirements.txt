@@ -77,3 +77,4 @@ pytest
 pytest-asyncio
 aiosqlite
 gtts
+gtts
