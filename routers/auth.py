@@ -8,17 +8,19 @@ router = APIRouter()
 USER_DATABASE = {
     "admin": {
         "password_hash": hashlib.sha256("admin2026_secure".encode()).hexdigest(),
-        "api_key": "pro_user_key"
+        "api_key": "pro_user_key",
     },
     "student": {
         "password_hash": hashlib.sha256("student2026_secure".encode()).hexdigest(),
-        "api_key": "free_user_key"
-    }
+        "api_key": "free_user_key",
+    },
 }
+
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
 
 @router.get("/login", response_class=HTMLResponse)
 async def serve_login_page():
@@ -190,18 +192,23 @@ async def serve_login_page():
 </html>
     """
 
+
 @router.post("/api/auth/login")
 async def login_user(payload: LoginRequest):
     user_record = USER_DATABASE.get(payload.username)
     if not user_record:
-        raise HTTPException(status_code=401, detail="Invalid credentials or unknown neural entity.")
-    
+        raise HTTPException(
+            status_code=401, detail="Invalid credentials or unknown neural entity."
+        )
+
     hashed_input_pwd = hashlib.sha256(payload.password.encode()).hexdigest()
     if hashed_input_pwd != user_record["password_hash"]:
-        raise HTTPException(status_code=401, detail="Invalid password verification hash.")
-    
+        raise HTTPException(
+            status_code=401, detail="Invalid password verification hash."
+        )
+
     return {
         "status": "success",
         "username": payload.username,
-        "api_key": user_record["api_key"]
+        "api_key": user_record["api_key"],
     }

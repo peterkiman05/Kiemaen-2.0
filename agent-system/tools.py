@@ -1,12 +1,13 @@
 import yfinance as yf
 
+
 def get_live_market_data(symbol: str) -> str:
     try:
         ticker = yf.Ticker(symbol)
         df = ticker.history(period="1d")
         if df.empty:
             return f"No live price data found for symbol: {symbol}"
-        
+
         latest = df.iloc[-1]
         return (
             f"Live Market Data for {symbol}:\n"

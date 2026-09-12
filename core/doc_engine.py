@@ -3,6 +3,7 @@ from pathlib import Path
 
 NOTES_FILE = Path("kiemaen_notes.json")
 
+
 class DocumentEngine:
     @staticmethod
     def save_note(title: str, content: str):
@@ -16,7 +17,11 @@ class DocumentEngine:
     def search_notes(keyword: str):
         notes = DocumentEngine.load_notes()
         clean_keyword = keyword.replace(":", "").strip().lower()
-        results = {t: c for t, c in notes.items() if clean_keyword in t.lower() or clean_keyword in c.lower()}
+        results = {
+            t: c
+            for t, c in notes.items()
+            if clean_keyword in t.lower() or clean_keyword in c.lower()
+        }
         return results
 
     @staticmethod

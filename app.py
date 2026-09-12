@@ -8,6 +8,7 @@ import json
 
 app = FastAPI(title="Kiemaen AI Advanced")
 
+
 def init_db():
     conn = sqlite3.connect("chat_sessions.db")
     cursor = conn.cursor()
@@ -23,12 +24,15 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 init_db()
+
 
 class ChatRequest(BaseModel):
     prompt: str
     session_id: Optional[str] = "default"
     model: Optional[str] = "llama3"
+
 
 FULL_STACK_UI = """<!DOCTYPE html>
 <html lang="en">
@@ -393,16 +397,20 @@ FULL_STACK_UI = """<!DOCTYPE html>
 </html>
 """
 
+
 @app.get("/", response_class=HTMLResponse)
 async def home():
     return FULL_STACK_UI
+
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest):
     conn = sqlite3.connect("chat_sessions.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)", 
-                   (req.session_id, "user", req.prompt))
+    cursor.execute(
+        "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
+        (req.session_id, "user", req.prompt),
+    )
     conn.commit()
     conn.close()
 
@@ -410,12 +418,10 @@ async def chat_endpoint(req: ChatRequest):
         full_reply = ""
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                payload = {
-                    "model": req.model,
-                    "prompt": req.prompt,
-                    "stream": True
-                }
-                async with client.stream("POST", "http://127.0.0.1:11434/api/generate", json=payload) as response:
+                payload = {"model": req.model, "prompt": req.prompt, "stream": True}
+                async with client.stream(
+                    "POST", "http://127.0.0.1:11434/api/generate", json=payload
+                ) as response:
                     async for chunk in response.aiter_text():
                         for line in chunk.splitlines():
                             if line.strip():
@@ -431,13 +437,17 @@ async def chat_endpoint(req: ChatRequest):
         # Save assistant full reply post-stream
         conn_db = sqlite3.connect("chat_sessions.db")
         cur_db = conn_db.cursor()
-        cur_db.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)", 
-                       (req.session_id, "assistant", full_reply))
+        cur_db.execute(
+            "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
+            (req.session_id, "assistant", full_reply),
+        )
         conn_db.commit()
         conn_db.close()
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)

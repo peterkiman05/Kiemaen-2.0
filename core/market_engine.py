@@ -1,12 +1,13 @@
 import urllib.request
 import json
 
+
 class MarketEngine:
     @staticmethod
     def analyze_live_market(symbol: str, timeframe: str):
         try:
             sym = symbol.upper().strip()
-            
+
             # Map common trading symbols to Yahoo Finance tickers correctly
             if sym == "XAUUSD" or sym == "GOLD":
                 ticker_symbol = "GC=F"
@@ -19,16 +20,13 @@ class MarketEngine:
 
             url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol}?interval=1d"
 
-            req = urllib.request.Request(
-                url, 
-                headers={'User-Agent': 'Mozilla/5.0'}
-            )
-            
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+
             with urllib.request.urlopen(req) as response:
                 data = json.loads(response.read().decode())
-                result = data['chart']['result'][0]
-                current_price = result['meta']['regularMarketPrice']
-                
+                result = data["chart"]["result"][0]
+                current_price = result["meta"]["regularMarketPrice"]
+
             tf = timeframe.lower()
             if "m" in tf:
                 sl_distance = current_price * 0.002
@@ -53,7 +51,7 @@ class MarketEngine:
                 "timeframe": timeframe.upper(),
                 "current_price": round(current_price, 4),
                 "buy_setup": {"sl": buy_sl, "tp1": buy_tp1, "tp2": buy_tp2},
-                "sell_setup": {"sl": sell_sl, "tp1": sell_tp1, "tp2": sell_tp2}
+                "sell_setup": {"sl": sell_sl, "tp1": sell_tp1, "tp2": sell_tp2},
             }
         except Exception as e:
             return {"error": f"Could not fetch live price: {str(e)}"}

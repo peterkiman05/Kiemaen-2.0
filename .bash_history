@@ -1,500 +1,500 @@
-                            continue
-                        try:
-                            obj = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        chunk = obj.get("response", "")
-                        if chunk:
-                            full_reply += chunk
-                            yield f"data: {json.dumps({'chunk': chunk})}\n\n"
-                        if obj.get("done"):
-                            break
-        except Exception as e:
-            msg = f"Local LLM server unreachable: {str(e)}"
-            full_reply = f"Echo from Kiemaen Backend: {req.prompt} ({msg})"
-            yield f"data: {json.dumps({'chunk': full_reply})}\n\n"
-
-        save_message(req.session_id, "assistant", full_reply, req.model)
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-# ---------------------------------------------------------------------------
-# Sessions + history
-# ---------------------------------------------------------------------------
-@app.get("/api/sessions")
-async def list_sessions():
-    with closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """
-            SELECT session_id,
-                   MAX(timestamp) AS last_active,
-                   (SELECT content FROM messages m2
-                     WHERE m2.session_id = m1.session_id AND m2.role = 'user'
-                     ORDER BY m2.id ASC LIMIT 1) AS preview,
-                   (SELECT model FROM messages m3
-                     WHERE m3.session_id = m1.session_id
-                     ORDER BY m3.id DESC LIMIT 1) AS model
-            FROM messages m1
-            GROUP BY session_id
-            ORDER BY last_active DESC
-            """
-        ).fetchall()
-    sessions = [dict(r) for r in rows]
-    for s in sessions:
-        if s["preview"] and len(s["preview"]) > 48:
-            s["preview"] = s["preview"][:48] + "…"
-    return JSONResponse({"sessions": sessions})
-
-
-@app.get("/api/history/{session_id}")
-async def get_history(session_id: str):
-    with closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT role, content, model, timestamp FROM messages WHERE session_id = ? ORDER BY id ASC",
-            (session_id,),
-        ).fetchall()
-    return JSONResponse({"messages": [dict(r) for r in rows]})
-
-
-@app.get("/api/history/{session_id}/paginated")
-async def get_paginated(session_id: str, limit: int = 50, offset: int = 0):
-    """Pagination support for lazy-loading older messages (currently unused but available)."""
-    messages = get_paginated_history(session_id, limit, offset)
-    return JSONResponse({"messages": messages})
-
-
-# ---------------------------------------------------------------------------
-# Models (live from Ollama)
-# ---------------------------------------------------------------------------
-@app.get("/api/models")
-async def list_models():
-    try:
-        res = await http_client.get(f"{OLLAMA_HOST}/api/tags", timeout=10.0)
-        if res.status_code == 200:
-            data = res.json()
-            names = [m["name"] for m in data.get("models", [])]
-            return JSONResponse({"models": names})
-        return JSONResponse({"models": [], "error": f"Ollama status {res.status_code}"})
-    except Exception as e:
-        return JSONResponse({"models": [], "error": str(e)})
-
-
-# ---------------------------------------------------------------------------
-# Document parsing — real text extraction for PDF / DOCX attachments
-# ---------------------------------------------------------------------------
-MAX_EXTRACTED_CHARS = 6000
-
-
-@app.post("/api/parse-file")
-async def parse_file(file: UploadFile = File(...)):
-    name = file.filename or "upload"
-    lower = name.lower()
-    raw = await file.read()
-    text = ""
-
-    try:
-        if lower.endswith(".pdf"):
-            if PdfReader is None:
-                return JSONResponse({"filename": name, "text": "", "error": "pypdf not installed on server"})
-            import io
-            reader = PdfReader(io.BytesIO(raw))
-            pages = [p.extract_text() or "" for p in reader.pages]
-            text = "\n".join(pages)
-        elif lower.endswith(".docx"):
-            if docx_lib is None:
-                return JSONResponse({"filename": name, "text": "", "error": "python-docx not installed on server"})
-            import io
-            document = docx_lib.Document(io.BytesIO(raw))
-            text = "\n".join(p.text for p in document.paragraphs)
-        else:
-            try:
-                text = raw.decode("utf-8", errors="ignore")
-            except Exception:
-                text = ""
-    except Exception as e:
-        return JSONResponse({"filename": name, "text": "", "error": str(e)})
-
-    text = text.strip()[:MAX_EXTRACTED_CHARS]
-    return JSONResponse({"filename": name, "text": text})
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
-KEOF
-
-echo "✓ Kiemaen ready on http://127.0.0.1:8000"
-python3 main.py
-pkill -f "python3 main.py"
-cp ~/storage/downloads/main_fixed.py ~/main.py
-cd ~
-python3 main.py
-# Stop the server
-ctrl+c
-# Replace main.py with the super-simple version
-cat > main.py << 'EOF'
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
-import httpx
-import json
-import sqlite3
-from contextlib import closing, asynccontextmanager
-from typing import Optional
-
-http_client = None
-
-@asynccontextmanager
-async def lifespan(app):
-    global http_client
-    http_client = httpx.AsyncClient(timeout=None)
-    yield
-    if http_client:
-        await http_client.aclose()
-
-app = FastAPI(lifespan=lifespan)
-
-SIMPLE_UI = """<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Kiemaen</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #07090e; color: #f3f4f6; font-family: system-ui; height: 100vh; }
-        .app { display: flex; flex-direction: column; height: 100vh; }
-        .header { padding: 12px; border-bottom: 1px solid #26334a; }
-        #chat { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
-        .msg { padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4; word-break: break-word; white-space: pre-wrap; max-width: 90%; }
-        .user { align-self: flex-end; background: #818cf8; color: #07090e; }
-        .ai { align-self: flex-start; background: #151c2c; border: 1px solid #26334a; }
-        .input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #26334a; }
-        .input-row input { flex: 1; background: #151c2c; border: none; color: #f3f4f6; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
-        .input-row button { background: #818cf8; color: #07090e; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 18px; font-weight: bold; }
-    </style>
-</head>
-<body>
-<div class="app">
-    <div class="header">Kiemaen AI</div>
-    <div id="chat"></div>
-    <div class="input-row">
-        <input type="text" id="msg" placeholder="Ask..." autofocus>
-        <button onclick="go()">↑</button>
-    </div>
-</div>
-
-<script>
-let sid = localStorage.getItem('s') || crypto.randomUUID();
-localStorage.setItem('s', sid);
-
-function go() {
-    let text = document.getElementById('msg').value.trim();
-    if (!text) return;
-    document.getElementById('msg').value = '';
     
-    let chat = document.getElementById('chat');
-    chat.innerHTML += '<div class="msg user">' + text + '</div>';
-    chat.innerHTML += '<div class="msg ai" id="r">...</div>';
-    chat.scrollTop = chat.scrollHeight;
+    start_time = time.time()
+    response = await call_next(request)
+    duration = (time.time() - start_time) * 1000
     
-    fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({prompt: text, session_id: sid, model: 'llama3.2:1b'})
-    }).then(r => r.body.getReader()).then(rdr => {
-        let out = '';
-        let el = document.getElementById('r');
-        function read() {
-            rdr.read().then(x => {
-                if (x.done) return;
-                let s = new TextDecoder().decode(x.value);
-                let ln = s.split('\\n\\n');
-                for (let l of ln) {
-                    if (l.startsWith('data: ')) {
-                        try {
-                            let o = JSON.parse(l.slice(6));
-                            if (o.chunk) { out += o.chunk; el.textContent = out; chat.scrollTop = chat.scrollHeight; }
-                        } catch(e) {}
-                    }
-                }
-                read();
-            });
+    response.headers["X-Tier"] = client_data["tier"]
+    response.headers["X-Requests-Remaining"] = str(client_data["requests_left"])
+    
+    logger.info(
+        f"Method: {request.method} | Path: {request.url.path} | "
+        f"Status: {response.status_code} | Latency: {duration:.2f}ms"
+    )
+    return response
+
+class AgentState(BaseModel):
+    messages: List[Dict[str, str]]
+    critique: str = ""
+    iteration: int = 0
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[Dict[str, str]] = []
+
+def primary_generator_node(state: AgentState) -> AgentState:
+    prompt_context = state.messages.copy()
+    if state.critique:
+        prompt_context.append({"role": "system", "content": f"Incorporate this feedback: {state.critique}"})
+    
+    response = ollama.chat(model="llama3.2:1b", messages=prompt_context)
+    content = response["message"]["content"]
+    
+    state.messages.append({"role": "assistant", "content": content})
+    state.iteration += 1
+    return state
+
+def secondary_reviewer_node(state: AgentState) -> AgentState:
+    latest_response = state.messages[-1]["content"]
+    review_prompt = [
+        {"role": "system", "content": "You are a rigorous technical validator. Evaluate the response for correctness, technical depth, and safety. Provide specific corrections or write 'APPROVED' if flawless."},
+        {"role": "user", "content": latest_response}
+    ]
+    
+    try:
+        critique_res = ollama.chat(model="qwen2.5:7b", messages=review_prompt)
+        state.critique = critique_res["message"]["content"]
+    except Exception:
+        state.critique = "APPROVED"
+        
+    return state
+
+def evaluate_progress(state: AgentState):
+    if "APPROVED" in state.critique.upper() or state.iteration >= 2:
+        return END
+    return "refine"
+
+workflow = StateGraph(AgentState)
+workflow.add_node("generator", primary_generator_node)
+workflow.add_node("reviewer", secondary_reviewer_node)
+
+workflow.set_entry_point("generator")
+workflow.add_edge("generator", "reviewer")
+workflow.add_conditional_edges("reviewer", evaluate_progress, {"refine": "generator", END: END})
+
+app_graph = workflow.compile()
+
+@app.post("/chat")
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    try:
+        initial_messages = request.history + [{"role": "user", "content": request.message}]
+        initial_state = AgentState(messages=initial_messages)
+        final_state = app_graph.invoke(initial_state)
+        reply_text = final_state["messages"][-1]["content"]
+        return {
+            "reply": reply_text,
+            "response": reply_text,
+            "engines_involved": ["llama3.2:1b", "qwen2.5:7b"],
+            "iterations": final_state["iteration"],
+            "status": "success"
         }
-        read();
-    }).catch(e => {
-        document.getElementById('r').textContent = 'Error: ' + e;
-    });
-}
+    except Exception as e:
+        error_msg = str(e) if str(e) else "Internal Error"
+        raise HTTPException(status_code=500, detail=error_msg)
 
-document.getElementById('msg').onkeypress = e => { if (e.key == 'Enter') go(); };
-</script>
-</body>
-</html>
-"""
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(payload: dict):
+    if payload.get("type") == "checkout.session.completed":
+        pass
+    return {"status": "received"}
 
-@app.get("/")
-async def home():
-    return HTMLResponse(SIMPLE_UI)
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
-@app.post("/api/chat/stream")
-async def stream(req: dict):
-    async def gen():
-        try:
-            async with http_client.stream("POST", "http://127.0.0.1:11434/api/generate", 
-                json={"model": req.get("model", "llama3.2:1b"), "prompt": req.get("prompt", ""), "stream": True}) as r:
-                async for line in r.aiter_lines():
-                    if line:
-                        try:
-                            o = json.loads(line)
-                            if o.get("response"):
-                                yield f"data: {json.dumps({'chunk': o['response']})}\n\n"
-                        except: pass
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-        yield "data: [DONE]\n\n"
-    return StreamingResponse(gen(), media_type="
-
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-curl -X POST "http://127.0.0.1:8000/api/chat" -H "Content-Type: application/json" -d '{"prompt": "Hello!"}'
-curl -X POST "http://127.0.0.1:8000/api/chat"      -H "Content-Type: application/json"      -d '{"prompt": "Hello!", "history": []}'
-ps aux | grep uvicorn
-from fastapi.responses import HTMLResponse
 @app.get("/terms", response_class=HTMLResponse)
 async def terms_of_service():
+    return "<html><body><h1>Terms of Service</h1><p>Acceptable use and platform guidelines.</p></body></html>"
+
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy_policy():
+    return "<html><body><h1>Privacy Policy</h1><p>Data protection and local processing details.</p></body></html>"
+
 @app.get("/dpa", response_class=HTMLResponse)
 async def data_processing_agreement():
-nano main.py
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-nano main.py
-[200~uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-~uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-pkill -f uvicorn
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-nano main.py
-[200~pkill -f uvicorn
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-nano main.py
-ollama pull llama3.2:1b
-ollama pull qwen2.5:7b
-pkill -f uvicorn
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-which ollama
-pkg install ollama
-ollama serve
-cp /home/claude/kiemaen/main.py ~/main.py
-cd ~
-python3 main.py
-# Stop old server
-pkill -f "python3 main.py"
-# Copy debug version
-cp /home/claude/kiemaen/main_debug.py ~/main.py
-# Start it
-cd ~
-python3 main.py
-cat > main.py << 'ENDCODE'
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
-import httpx, json
-from contextlib import asynccontextmanager
+    return "<html><body><h1>Data Processing Agreement</h1><p>Controller and processor terms.</p></body></html>"
 
-http_client = None
+try:
+    from routers import (
+        legal, monetization, chat, evolution, frontend, security, 
+        tutor, freelance, auth, firewall, integration, rate_limiter, 
+        ddos_defense, code_verifier, hash_verifier, pkce_verifier, 
+        rls_enforcer, rls_policies, tool_connectors, messaging_channels, token_generator
+    )
+    for router_module in [
+        legal, monetization, chat, evolution, frontend, security, 
+        tutor, freelance, auth, firewall, integration, rate_limiter, 
+        ddos_defense, code_verifier, hash_verifier, pkce_verifier, 
+        rls_enforcer, rls_policies, tool_connectors, messaging_channels, token_generator
+    ]:
+        if hasattr(router_module, "router"):
+            app.include_router(router_module.router)
+except ImportError:
+    pass
 
-@asynccontextmanager
-async def lifespan(app):
-    global http_client
-    http_client = httpx.AsyncClient(timeout=None)
-    yield
-    if http_client:
-        await http_client.aclose()
-
-app = FastAPI(lifespan=lifespan)
-
-UI = """<!DOCTYPE html>
-<html>
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    return """
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kiemaen Debug</title>
+    <title>Kiemaen AI</title>
     <style>
-        body { background: #07090e; color: #f3f4f6; font-family: system-ui; margin: 0; padding: 12px; }
-        .box { background: #151c2c; border: 1px solid #26334a; border-radius: 8px; padding: 12px; margin: 12px 0; }
-        button { background: #818cf8; color: #07090e; border: none; padding: 10px 16px; border-radius: 6px; font-size: 16px; cursor: pointer; margin: 8px 0; }
-        input { background: #151c2c; color: #f3f4f6; border: 1px solid #26334a; padding: 10px; border-radius: 6px; font-size: 14px; width: 100%; max-width: 300px; margin: 8px 0; }
-        .msg { padding: 8px 12px; border-radius: 6px; margin: 4px 0; font-size: 13px; }
-        .user { background: #818cf8; color: #07090e; }
-        .ai { background: #26334a; }
-        .error { background: #ef4444; color: white; }
-        .success { background: #4ade80; color: #07090e; }
+        :root { background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        header { padding: 1rem 2rem; background: #1e293b; border-bottom: 1px solid #334155; font-size: 1.25rem; font-weight: bold; }
+        .chat-container { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-width: 800px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+        .message { padding: 0.75rem 1rem; border-radius: 0.5rem; max-width: 70%; line-height: 1.5; word-break: break-word; }
+        .user { background: #3b82f6; align-self: flex-end; }
+        .assistant { background: #334155; align-self: flex-start; }
+        .toolbar { display: flex; gap: 0.5rem; padding: 0.5rem 1.5rem; max-width: 800px; margin: 0 auto; width: 100%; box-sizing: border-box; overflow-x: auto; }
+        .tool-btn { background: #475569; color: #f8fafc; border: 1px solid #475569; font-size: 0.85rem; padding: 0.4rem 0.8rem; border-radius: 0.375rem; cursor: pointer; white-space: nowrap; }
+        .tool-btn:hover { background: #334155; }
+        .input-panel { padding: 1rem; background: #1e293b; border-top: 1px solid #334155; display: flex; gap: 0.5rem; max-width: 800px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+        textarea { flex: 1; background: #0f172a; border: 1px solid #475569; color: #f8fafc; padding: 0.75rem; border-radius: 0.375rem; resize: none; height: 24px; font-family: inherit; }
+        button.send-btn { background: #3b82f6; color: white; border: none; padding: 0.75rem 1.25rem; border-radius: 0.375rem; cursor: pointer; font-weight: 600; }
+        button.send-btn:hover { background: #2563eb; }
     </style>
 </head>
 <body>
-<h2>Kiemaen - Diagnostics</h2>
+    <header>Kiemaen AI</header>
+    <div class="chat-container" id="chatBox">
+        <div class="message assistant">Hello! I am Kiemaen AI. How can I assist you today?</div>
+    </div>
+    <div class="toolbar">
+        <button class="tool-btn" onclick="triggerUpload()">📁 Upload</button>
+        <button class="tool-btn" onclick="triggerCopy()">📋 Copy Last</button>
+        <button class="tool-btn" onclick="toggleRecord()">🎙️ Record</button>
+        <button class="tool-btn" onclick="toggleSpeechToSpeech()">🔊 Speech-to-Speech</button>
+    </div>
+    <div class="input-panel">
+        <textarea id="userInput" placeholder="Message Kiemaen AI..." rows="1" onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" onclick="sendMessage()">Send</button>
+    </div>
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            appendMessage(text, 'user');
+            input.value = '';
 
-<div class="box">
-    <b>Is Ollama Running?</b>
-    <button onclick="testOllama()">Test Connection</button>
-    <div id="status"></div>
-</div>
-
-<div class="box">
-    <b>Send Message</b>
-    <input type="text" id="msg" placeholder="Ask Kiemaen..." autofocus>
-    <button onclick="send()">Send</button>
-    <div id="chat"></div>
-</div>
-
-<script>
-function testOllama() {
-    let el = document.getElementById('status');
-    el.innerHTML = '<div class="msg ai">Checking...</div>';
-    fetch('/api/health').then(r => r.json()).then(d => {
-        if (d.ok) {
-            el.innerHTML = '<div class="msg success">✓ Ollama is running!</div>';
-        } else {
-            el.innerHTML = '<div class="msg error">✗ Ollama error: ' + d.error + '</div>';
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await response.json();
+                appendMessage(data.reply || data.response || "Received response.", 'assistant');
+            } catch (err) {
+                appendMessage("Error connecting to server.", 'assistant');
+            }
         }
-    }).catch(e => {
-        el.innerHTML = '<div class="msg error">✗ Cannot reach server: ' + e + '</div>';
-    });
-}
-
-function send() {
-    let text = document.getElementById('msg').value.trim();
-    if (!text) return;
-    document.getElementById('msg').value = '';
-    
-    let chat = document.getElementById('chat');
-    chat.innerHTML += '<div class="msg user">' + text + '</div>';
-    
-    let responseEl = document.createElement('div');
-    responseEl.className = 'msg ai';
-    responseEl.id = 'response';
-    responseEl.textContent = 'Streaming...';
-    chat.appendChild(responseEl);
-    chat.scrollTop = 9999;
-    
-    fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({prompt: text, session_id: 'test', model: 'llama3.2:1b'})
-    }).then(r => r.body.getReader()).then(reader => {
-        let output = '';
-        let decoder = new TextDecoder();
-        function read() {
-            reader.read().then(({done, value}) => {
-                if (done) return;
-                let chunk = decoder.decode(value, {stream: true});
-                for (let line of chunk.split('\\n\\n')) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            let obj = JSON.parse(line.slice(6));
-                            if (obj.chunk) output += obj.chunk;
-                            if (obj.error) output = 'ERROR: ' + obj.error;
-                        } catch(e) {}
-                    }
-                }
-                responseEl.textContent = output || '(empty)';
-                chat.scrollTop = 9999;
-                read();
-            });
+        function appendMessage(text, sender) {
+            const box = document.getElementById('chatBox');
+            const div = document.createElement('div');
+            div.className = `message ${sender}`;
+            div.textContent = text;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
         }
-        read();
-    }).catch(e => {
-        responseEl.textContent = 'Failed: ' + e;
-    });
-}
-
-document.getElementById('msg').onkeypress = e => { if (e.key == 'Enter') send(); };
-testOllama();
-</script>
+        function handleKey(e) { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+        function triggerUpload() { alert("File upload tool triggered."); }
+        function triggerCopy() { 
+            const messages = document.querySelectorAll('.message.assistant');
+            if (messages.length > 0) {
+                navigator.clipboard.writeText(messages[messages.length - 1].textContent);
+                alert("Copied last response to clipboard.");
+            }
+        }
+        function toggleRecord() { alert("Audio recording toggled."); }
+        function toggleSpeechToSpeech() { alert("Speech-to-speech mode toggled."); }
+    </script>
 </body>
 </html>
-"""
+    """
+EOF
 
-@app.get("/")
-async def home():
-    return HTMLResponse(UI)
-
-@app.get("/api/health")
-async def health():
-    try:
-        async with http_client.get("http://127.0.0.1:11434/api/tags", timeout=3.0) as r:
-            return JSONResponse({"ok": r.status_code == 200, "error": None if r.status_code == 200 else f"HTTP {r.status_code}"})
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)})
-
-@app.post("/api/chat/stream")
-async def stream(req: Request):
-    data = await req.json()
-    async def gen():
-        try:
-            async with http_client.stream("POST", "http://127.0.0.1:11434/api/generate",
-                json={"model": data.get("model"), "prompt": data.get("prompt"), "stream": True}, timeout=120) as r:
-                async for line in r.aiter_lines():
-                    if line:
-                        try:
-                            obj = json.loads(line)
-                            if obj.get("response"):
-                                yield f"data: {json.dumps({'chunk': obj['response']})}\n\n"
-                        except: pass
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    return StreamingResponse(gen(), media_type="text/event-stream")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
-ENDCODE
-
-python3 main.py
-# Stop current server
-pkill -f "python3 main.py"
-# Copy polished version
-cp /home/claude/kiemaen/main_polished.py ~/main.py
-# Start it
-cd ~
-python3 main.py
-import sqlite3
-import httpx
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+ssh -R 80:localhost:8000 serveo.net
+npm install -g localtunnel
+lt --port 8000
+hlt --port 8000 --no-open
+lt --port 8000 --no-open
+pkg install cloudflared
+cloudflared tunnel --url http://localhost:8000
+nano core/middleware.py
+PYTHONPATH=. pytest tests/
+-grep -n "USER_TIERS" main.py -A 5
+grep -n "USER_TIERS" main.py -A 5
+tests/test_main.py
+nanotests/test_main.py
+nano tests/test_main.p
+PYTHONPATH=. pytest tests/
+nano tests/test_main.py
+PYTHONPATH=. pytest tests/
+git add core/database.py core/middleware.py tests/test_main.py requirements.txt
+git commit -m "Finalize production layers: database persistence, middleware logging, and automated test suite"
+git push origin main
+tail -n 30 server.log
+tail -n 40 server.log
+bash start_production.sh
+tail -n 30 server.log
+nano main.py
+pkill -f uvicorn
+bash start_production.sh
+uvicorn main:app --host 0.0.0.0 --port 8000
+nano main.py
+uvicorn main:app --host 0.0.0.0 --port 8000
+pkill -f uvicorn
+uvicorn main:app --host 0.0.0.0 --port 8000
+pkill -f uvicorn
+uvicorn main:app --host 0.0.0.0 --port 8000
+nano main.py
+pkill -f uvicorn                                       uvicorn main:app --host 0.0.0.0 --port 8000
+pkill -f uvicorn
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+nano main.py
+cat << 'EOF' > main.py
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import Optional
-import json
-app = FastAPI(title="Kiemaen AI Advanced")
-def init_db():
-init_db() class ChatRequest(BaseModel):
-<html lang="en">
-<head>
-</head>
-<body>
-</body>
-</html>
-"""
+from typing import List, Dict, Any
+from langgraph.graph import StateGraph, END
+import ollama
+import time
+import logging
+
+app = FastAPI(title="Multi-Engine Self-Evolving AI Backend")
+logger = logging.getLogger("uvicorn.error")
+
+USER_TIERS = {
+    "free_user_key": {"tier": "free", "requests_left": 10},
+    "pro_user_key": {"tier": "pro", "requests_left": 1000}
+}
+
+public_paths = ["/", "/health", "/terms", "/privacy", "/dpa", "/docs", "/openapi.json", "/api/webhook/stripe"]
+
+@app.middleware("http")
+async def metering_and_auth_middleware(request: Request, call_next):
+    if request.url.path in public_paths:
+        return await call_next(request)
+    
+    api_key = request.headers.get("X-API-Key")
+    if not api_key or api_key not in USER_TIERS:
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing API Key")
+    
+    client_data = USER_TIERS[api_key]
+    if client_data["requests_left"] <= 0:
+        raise HTTPException(status_code=402, detail="Payment Required: Quota exhausted. Please upgrade to Pro.")
+    
+    client_data["requests_left"] -= 1
+    
+    start_time = time.time()
+    response = await call_next(request)
+    duration = (time.time() - start_time) * 1000
+    
+    response.headers["X-Tier"] = client_data["tier"]
+    response.headers["X-Requests-Remaining"] = str(client_data["requests_left"])
+    
+    logger.info(
+        f"Method: {request.method} | Path: {request.url.path} | "
+        f"Status: {response.status_code} | Latency: {duration:.2f}ms"
+    )
+    return response
+
+class AgentState(BaseModel):
+    messages: List[Dict[str, str]]
+    critique: str = ""
+    iteration: int = 0
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[Dict[str, str]] = []
+
+def primary_generator_node(state: AgentState) -> AgentState:
+    prompt_context = state.messages.copy()
+    if state.critique:
+        prompt_context.append({"role": "system", "content": f"Incorporate this feedback: {state.critique}"})
+    
+    response = ollama.chat(model="llama3.2:1b", messages=prompt_context)
+    content = response["message"]["content"]
+    
+    state.messages.append({"role": "assistant", "content": content})
+    state.iteration += 1
+    return state
+
+def secondary_reviewer_node(state: AgentState) -> AgentState:
+    latest_response = state.messages[-1]["content"]
+    review_prompt = [
+        {"role": "system", "content": "You are a rigorous technical validator. Evaluate the response for correctness, technical depth, and safety. Provide specific corrections or write 'APPROVED' if flawless."},
+        {"role": "user", "content": latest_response}
+    ]
+    
+    try:
+        critique_res = ollama.chat(model="qwen2.5:7b", messages=review_prompt)
+        state.critique = critique_res["message"]["content"]
+    except Exception:
+        state.critique = "APPROVED"
+        
+    return state
+
+def evaluate_progress(state: AgentState):
+    if "APPROVED" in state.critique.upper() or state.iteration >= 2:
+        return END
+    return "refine"
+
+workflow = StateGraph(AgentState)
+workflow.add_node("generator", primary_generator_node)
+workflow.add_node("reviewer", secondary_reviewer_node)
+
+workflow.set_entry_point("generator")
+workflow.add_edge("generator", "reviewer")
+workflow.add_conditional_edges("reviewer", evaluate_progress, {"refine": "generator", END: END})
+
+app_graph = workflow.compile()
+
+@app.post("/chat")
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    try:
+        initial_messages = request.history + [{"role": "user", "content": request.message}]
+        initial_state = AgentState(messages=initial_messages)
+        final_state = app_graph.invoke(initial_state)
+        reply_text = final_state["messages"][-1]["content"]
+        return {
+            "reply": reply_text,
+            "response": reply_text,
+            "engines_involved": ["llama3.2:1b", "qwen2.5:7b"],
+            "iterations": final_state["iteration"],
+            "status": "success"
+        }
+    except Exception as e:
+        error_msg = str(e) if str(e) else "Internal Error"
+        raise HTTPException(status_code=500, detail=error_msg)
+
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(payload: dict):
+    if payload.get("type") == "checkout.session.completed":
+        pass
+    return {"status": "received"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+@app.get("/terms", response_class=HTMLResponse)
+async def terms_of_service():
+    return "<html><body><h1>Terms of Service</h1><p>Acceptable use and platform guidelines.</p></body></html>"
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy():
+    return "<html><body><h1>Privacy Policy</h1><p>Data protection and local processing details.</p></body></html>"
+
+@app.get("/dpa", response_class=HTMLResponse)
+async def data_processing_agreement():
+    return "<html><body><h1>Data Processing Agreement</h1><p>Controller and processor terms.</p></body></html>"
+
+try:
+    from routers import (
+        legal, monetization, chat, evolution, frontend, security, 
+        tutor, freelance, auth, firewall, integration, rate_limiter, 
+        ddos_defense, code_verifier, hash_verifier, pkce_verifier, 
+        rls_enforcer, rls_policies, tool_connectors, messaging_channels, token_generator
+    )
+    for router_module in [
+        legal, monetization, chat, evolution, frontend, security, 
+        tutor, freelance, auth, firewall, integration, rate_limiter, 
+        ddos_defense, code_verifier, hash_verifier, pkce_verifier, 
+        rls_enforcer, rls_policies, tool_connectors, messaging_channels, token_generator
+    ]:
+        if hasattr(router_module, "router"):
+            app.include_router(router_module.router)
+except ImportError:
+    pass
 
 @app.get("/", response_class=HTMLResponse)
-async def home():
-    return FULL_STACK_UI
+async def serve_frontend():
+    return """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiemaen AI</title>
+    <style>
+        :root { background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        header { padding: 1rem 2rem; background: #1e293b; border-bottom: 1px solid #334155; font-size: 1.25rem; font-weight: bold; }
+        .chat-container { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-width: 800px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+        .message { padding: 0.75rem 1rem; border-radius: 0.5rem; max-width: 70%; line-height: 1.5; word-break: break-word; }
+        .user { background: #3b82f6; align-self: flex-end; }
+        .assistant { background: #334155; align-self: flex-start; }
+        .toolbar { display: flex; gap: 0.5rem; padding: 0.5rem 1.5rem; max-width: 800px; margin: 0 auto; width: 100%; box-sizing: border-box; overflow-x: auto; }
+        .tool-btn { background: #475569; color: #f8fafc; border: 1px solid #475569; font-size: 0.85rem; padding: 0.4rem 0.8rem; border-radius: 0.375rem; cursor: pointer; white-space: nowrap; }
+        .tool-btn:hover { background: #334155; }
+        .input-panel { padding: 1rem; background: #1e293b; border-top: 1px solid #334155; display: flex; gap: 0.5rem; max-width: 800px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+        textarea { flex: 1; background: #0f172a; border: 1px solid #475569; color: #f8fafc; padding: 0.75rem; border-radius: 0.375rem; resize: none; height: 24px; font-family: inherit; }
+        button.send-btn { background: #3b82f6; color: white; border: none; padding: 0.75rem 1.25rem; border-radius: 0.375rem; cursor: pointer; font-weight: 600; }
+        button.send-btn:hover { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <header>Kiemaen AI</header>
+    <div class="chat-container" id="chatBox">
+        <div class="message assistant">Hello! I am Kiemaen AI. How can I assist you today?</div>
+    </div>
+    <div class="toolbar">
+        <button class="tool-btn" onclick="triggerUpload()">📁 Upload</button>
+        <button class="tool-btn" onclick="triggerCopy()">📋 Copy Last</button>
+        <button class="tool-btn" onclick="toggleRecord()">🎙️ Record</button>
+        <button class="tool-btn" onclick="toggleSpeechToSpeech()">🔊 Speech-to-Speech</button>
+    </div>
+    <div class="input-panel">
+        <textarea id="userInput" placeholder="Message Kiemaen AI..." rows="1" onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" onclick="sendMessage()">Send</button>
+    </div>
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            appendMessage(text, 'user');
+            input.value = '';
 
-@app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest):
-    conn = sqlite3.connect("chat_sessions.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)", 
-if __name__ == "__main__":;     import uvicorn;     uvicorn.run(app, host="127.0.0.1", port=8000)
-nano app.py
-pip install fastapi uvicorn httpx pydantic
-python app.py
-ollama --version
-curl http://localhost:11434/api/tags
-nano main.py
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-python -m pip install fastapi uvicorn langgraph ollama pydantic
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await response.json();
+                appendMessage(data.reply || data.response || "Received response.", 'assistant');
+            } catch (err) {
+                appendMessage("Error connecting to server.", 'assistant');
+            }
+        }
+        function appendMessage(text, sender) {
+            const box = document.getElementById('chatBox');
+            const div = document.createElement('div');
+            div.className = `message ${sender}`;
+            div.textContent = text;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+        function handleKey(e) { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+        function triggerUpload() { alert("File upload tool triggered."); }
+        function triggerCopy() { 
+            const messages = document.querySelectorAll('.message.assistant');
+            if (messages.length > 0) {
+                navigator.clipboard.writeText(messages[messages.length - 1].textContent);
+                alert("Copied last response to clipboard.");
+            }
+        }
+        function toggleRecord() { alert("Audio recording toggled."); }
+        function toggleSpeechToSpeech() { alert("Speech-to-speech mode toggled."); }
+    </script>
+</body>
+</html>
+    """
+EOF
+
+git add main.py
+git commit -m "Fix import parentheses syntax error on line 141"
+git push origin main
+ollama serve

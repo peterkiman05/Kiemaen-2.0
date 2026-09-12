@@ -1,3 +1,5 @@
+import os
+
 code = '''import os
 import sqlite3
 import subprocess
@@ -31,14 +33,14 @@ DB_NAME = "kiemaen_memory.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute(\"\"\"
+    cursor.execute(\'\'\'
         CREATE TABLE IF NOT EXISTS conversation_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             role TEXT,
             content TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
-    \"\"\")
+    \'\'\')
     conn.commit()
     conn.close()
 
@@ -56,14 +58,14 @@ def tool_solve_math(expression: str) -> str:
         result = sp.sympify(expression)
         return f"Exact Result: {result} | Decimal Approximation: {float(result.evalf())}"
     except Exception as e:
-        return f"Math calculation error: {str(e)}"
+        return f"Math calculation error: {e!s}"
 
 def tool_workspace_audit() -> str:
     try:
         files = [f for f in os.listdir(".") if os.path.isfile(f) and not f.startswith(".")]
         return f"Workspace File Inventory: {', '.join(files)}"
     except Exception as e:
-        return f"Audit error: {str(e)}"
+        return f"Audit error: {e!s}"
 
 class Message(BaseModel):
     role: str
@@ -124,7 +126,7 @@ def chat_completions(payload: ChatCompletionRequest):
         tool_output = f"\\n\\n[Tool Execution - Workspace Audit]: {tool_workspace_audit()}"
 
     search_context = ""
-    if tavily_client and any(keyword in lower_msg for keyword in ["news", "latest", "current", "weather", "price", "who is", "what happened", "2026"]):
+    if tavily_client and any(keyword in lower_msg for keyword in ["news", "latest", "current", "weather", "price", "who is", "what"]):
         try:
             search_result = tavily_client.search(query=user_message, search_depth="basic", max_results=3)
             search_context = "\\n\\nLive Web Search Results:\\n" + str(search_result)
@@ -145,7 +147,7 @@ def chat_completions(payload: ChatCompletionRequest):
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    
+
     target_model = payload.model if payload.model in ["llama-3.3-70b-versatile", "llama3-8b-8192", "mixtral-8x7b-32768"] else "llama-3.3-70b-versatile"
 
     data = {
@@ -157,10 +159,10 @@ def chat_completions(payload: ChatCompletionRequest):
     try:
         response = requests.post(GROQ_CHAT_URL, headers=headers, json=data, timeout=30)
         res_data = response.json()
-        
+
         if "choices" not in res_data:
             raise HTTPException(status_code=500, detail=f"LLM API Error: {res_data}")
-        
+
         reply_text = res_data["choices"][0]["message"]["content"]
         save_chat_memory("assistant", reply_text)
 
@@ -187,7 +189,8 @@ def execute_python_code(payload: CodeExecutionRequest):
             ["python", temp_file_path],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
+            check=False
         )
         output = result.stdout if result.returncode == 0 else result.stderr
         return {
@@ -232,7 +235,7 @@ def write_workspace_file(payload: FileWriteRequest):
 
 @app.get("/chat", response_class=HTMLResponse)
 def serve_chat_ui():
-    return '''<!DOCTYPE html>
+    return \'\'\'<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -254,7 +257,7 @@ def serve_chat_ui():
 <body>
     <header>Kiemaen Universal AI (Agentic v3.0)</header>
     <div id="chat-container">
-        <div class="message assistant">Hello! I am Kiemaen v3.0. Tool registry for math calculation and file auditing is now active. How can I assist you?</div>
+        <div class="message assistant">Hello! I am Kiemaen v3.0. Tool registry for math calculation and file auditing is now active.</div>
     </div>
     <div id="input-area">
         <input type="text" id="user-input" placeholder="Type a message (e.g. math: 2**10 or audit workspace)..." autofocus>
@@ -263,7 +266,7 @@ def serve_chat_ui():
     <script>
         const chatContainer = document.getElementById("chat-container");
         const userInput = document.getElementById("user-input");
-        let messageHistory = [{ role: "assistant", content: "Hello! I am Kiemaen v3.0. Tool registry for math calculation and file auditing is now active. How can I assist you?" }];
+        let messageHistory = [{ role: "assistant", content: "Hello! I am Kiemaen v3.0. Tool registry for math calculation and file auditing is now active." }];
 
         userInput.addEventListener("keypress", function (e) {
             if (e.key === "Enter") sendMessage();
@@ -286,7 +289,7 @@ def serve_chat_ui():
                 });
                 const data = await response.json();
                 const reply = data.choices[0].message.content;
-                
+
                 messageHistory.push({ role: "assistant", content: reply });
                 appendMessage("assistant", reply);
             } catch (err) {
@@ -303,9 +306,9 @@ def serve_chat_ui():
         }
     </script>
 </body>
-</html>'''
+</html>\'\'\'
 '''
 
 with open("main.py", "w") as f:
     f.write(code)
-print("SUCCESS: main.py successfully generated via update_v3.py!")
+print("SUCCESS: main.py successfully generated!")

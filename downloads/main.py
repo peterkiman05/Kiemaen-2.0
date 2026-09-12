@@ -713,7 +713,9 @@ async def chat_endpoint(req: ChatRequest):
                 json={"model": req.model, "prompt": req.prompt, "stream": False},
             )
             if res.status_code == 200:
-                reply = res.json().get("response", "Received empty response from model.")
+                reply = res.json().get(
+                    "response", "Received empty response from model."
+                )
             else:
                 reply = f"Ollama Error: Status {res.status_code}"
     except Exception as e:
@@ -820,11 +822,14 @@ async def list_models():
                 data = res.json()
                 names = [m["name"] for m in data.get("models", [])]
                 return JSONResponse({"models": names})
-            return JSONResponse({"models": [], "error": f"Ollama status {res.status_code}"})
+            return JSONResponse(
+                {"models": [], "error": f"Ollama status {res.status_code}"}
+            )
     except Exception as e:
         return JSONResponse({"models": [], "error": str(e)})
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)

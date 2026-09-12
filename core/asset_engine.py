@@ -3,6 +3,7 @@ from pathlib import Path
 
 ASSETS_FILE = Path("kiemaen_assets.json")
 
+
 class AssetEngine:
     @staticmethod
     def register_asset(name: str, path_or_url: str):

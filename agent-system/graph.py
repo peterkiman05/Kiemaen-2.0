@@ -6,18 +6,16 @@ from tools import get_live_market_data
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "qwen2.5:1.5b"
 
+
 def call_llm(prompt: str) -> str:
-    payload = {
-        "model": MODEL_NAME,
-        "prompt": prompt,
-        "stream": False
-    }
+    payload = {"model": MODEL_NAME, "prompt": prompt, "stream": False}
     try:
         response = requests.post(OLLAMA_URL, json=payload, timeout=120)
         response.raise_for_status()
         return response.json().get("response", "")
     except Exception as e:
         return f"LLM Error: {str(e)}"
+
 
 def worker_agent(state: AgentState) -> dict:
     task = state["task"]
@@ -29,7 +27,12 @@ def worker_agent(state: AgentState) -> dict:
     words = task.replace(",", " ").split()
     for word in words:
         if "=" in word or word.isupper() and len(word) in [3, 6, 7]:
-            if "=" in word or word.endswith("USD") or word.startswith("EUR") or word.startswith("GBP"):
+            if (
+                "=" in word
+                or word.endswith("USD")
+                or word.startswith("EUR")
+                or word.startswith("GBP")
+            ):
                 data = get_live_market_data(word)
                 if "Error" not in data and "No live price" not in data:
                     market_context += f"\n\n[LIVE MARKET DATA]\n{data}\n"
@@ -45,10 +48,8 @@ Task: {task}
     prompt += "\nProvide a complete, actionable, high-quality solution."
 
     output = call_llm(prompt)
-    return {
-        "worker_output": output,
-        "iteration": iteration + 1
-    }
+    return {"worker_output": output, "iteration": iteration + 1}
+
 
 def reviewer_agent(state: AgentState) -> dict:
     task = state["task"]
@@ -75,10 +76,8 @@ FEEDBACK: <detailed reasons or improvements required>
     else:
         status = "REJECTED"
 
-    return {
-        "review_status": status,
-        "feedback": review_res
-    }
+    return {"review_status": status, "feedback": review_res}
+
 
 def should_continue(state: AgentState) -> str:
     if state.get("review_status") == "APPROVED":
@@ -87,15 +86,15 @@ def should_continue(state: AgentState) -> str:
         return END
     return "worker"
 
+
 workflow = StateGraph(AgentState)
 workflow.add_node("worker", worker_agent)
 workflow.add_node("reviewer", reviewer_agent)
 
 workflow.set_entry_point("worker")
 workflow.add_edge("worker", "reviewer")
-workflow.add_conditional_edges("reviewer", should_continue, {
-    "worker": "worker",
-    END: END
-})
+workflow.add_conditional_edges(
+    "reviewer", should_continue, {"worker": "worker", END: END}
+)
 
 graph = workflow.compile()

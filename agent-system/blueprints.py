@@ -6,15 +6,18 @@ from database import log_run
 
 router = APIRouter(prefix="/blueprints", tags=["Cashflow Blueprints"])
 
+
 class TradingStrategyRequest(BaseModel):
     asset_class: str = Field(..., example="XAUUSD")
     timeframe: str = Field(..., example="15m")
     strategy_style: str = Field(..., example="Breakout Momentum")
 
+
 class ArbitrageRequest(BaseModel):
     source_platform: str = Field(..., example="Supplier A")
     target_platform: str = Field(..., example="Zoey")
     category: str = Field(..., example="Electronics")
+
 
 class LeadGenRequest(BaseModel):
     target_niche: str = Field(..., example="Civil Engineering Consultants")
@@ -47,11 +50,15 @@ def execute_graph(task: str) -> TaskResponse:
         "review_status": None,
         "feedback": None,
         "iteration": 0,
-        "max_iterations": 2
+        "max_iterations": 2,
     }
     try:
         final_state = graph.invoke(initial_state)
-        status = "SUCCESS" if final_state.get("review_status") == "APPROVED" else "MAX_ITERATIONS_REACHED"
+        status = (
+            "SUCCESS"
+            if final_state.get("review_status") == "APPROVED"
+            else "MAX_ITERATIONS_REACHED"
+        )
         iterations = final_state.get("iteration", 0)
         output = final_state.get("worker_output", "No output generated.")
         feedback = final_state.get("feedback", "")
@@ -63,7 +70,7 @@ def execute_graph(task: str) -> TaskResponse:
             status=status,
             iterations_used=iterations,
             final_output=output,
-            review_feedback=feedback
+            review_feedback=feedback,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

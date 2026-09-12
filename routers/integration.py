@@ -4,8 +4,10 @@ import subprocess
 
 router = APIRouter()
 
+
 class VoiceCommandRequest(BaseModel):
     command: str
+
 
 @router.post("/api/jarvis/voice-sync")
 async def sync_voice_command(payload: VoiceCommandRequest):
@@ -15,8 +17,9 @@ async def sync_voice_command(payload: VoiceCommandRequest):
         "status": "success",
         "audio_response_ready": True,
         "voice_engine": "ElevenLabs Hermes Bridge",
-        "log": action_log
+        "log": action_log,
     }
+
 
 @router.post("/api/jarvis/deploy-cloud")
 async def deploy_to_cloud():
@@ -24,5 +27,5 @@ async def deploy_to_cloud():
     return {
         "status": "ready",
         "target": "Persistent Cloud VPS / Render",
-        "instructions": "Push repository to GitHub and link via Render dashboard with start command: uvicorn main:app --host 0.0.0.0 --port $PORT"
+        "instructions": "Push repository to GitHub and link via Render dashboard with start command: uvicorn main:app --host 0.0.0.0 --port $PORT",
     }

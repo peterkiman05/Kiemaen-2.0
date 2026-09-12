@@ -3,6 +3,7 @@ from datetime import datetime
 
 DB_PATH = "agent_history.db"
 
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -19,12 +20,16 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def log_execution(task: str, worker_output: str, review_status: str, feedback: str):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO executions (timestamp, task, worker_output, review_status, feedback)
         VALUES (?, ?, ?, ?, ?)
-    """, (datetime.utcnow().isoformat(), task, worker_output, review_status, feedback))
+    """,
+        (datetime.utcnow().isoformat(), task, worker_output, review_status, feedback),
+    )
     conn.commit()
     conn.close()

@@ -20,11 +20,13 @@ INJECTION_PATTERNS = [
     r"exfiltrate",
     r"drop database",
     r"rm -rf",
-    r"override security"
+    r"override security",
 ]
+
 
 class FirewallScanRequest(BaseModel):
     prompt: str
+
 
 class FirewallResponse(BaseModel):
     safe: bool
@@ -32,11 +34,12 @@ class FirewallResponse(BaseModel):
     matched_rules: list[str]
     sanitized_prompt: str
 
+
 def inspect_prompt(text: str) -> tuple[bool, float, list[str]]:
     lowered = text.lower()
     matched = []
     risk = 0.0
-    
+
     for pattern in INJECTION_PATTERNS:
         if re.search(pattern, lowered):
             matched.append(pattern)
@@ -46,10 +49,11 @@ def inspect_prompt(text: str) -> tuple[bool, float, list[str]]:
     is_safe = risk < 0.5
     return is_safe, risk, matched
 
+
 @router.post("/api/firewall/inspect", response_model=FirewallResponse)
 async def firewall_inspect(payload: FirewallScanRequest):
     safe, risk_score, matched_rules = inspect_prompt(payload.prompt)
-    
+
     sanitized = html.escape(payload.prompt)
     if not safe:
         sanitized = "[BLOCKED_BY_AI_FIREWALL: Potential Prompt Injection or Jailbreak Attempt Detected]"
@@ -58,5 +62,5 @@ async def firewall_inspect(payload: FirewallScanRequest):
         "safe": safe,
         "risk_score": risk_score,
         "matched_rules": matched_rules,
-        "sanitized_prompt": sanitized
+        "sanitized_prompt": sanitized,
     }

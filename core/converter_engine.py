@@ -1,16 +1,17 @@
 import re
 
+
 class ConverterEngine:
     @staticmethod
     def convert_units(prompt: str):
         query = prompt.lower()
         numbers = [float(x) for x in re.findall(r"[-+]?\d*\.\d+|\d+", prompt)]
-        
+
         if not numbers:
             return "No numerical value provided for conversion."
-        
+
         val = numbers[0]
-        
+
         if "mm" in query and "m" in query:
             if "mm to m" in query:
                 return f"{val} mm = {val / 1000} m"
@@ -23,6 +24,7 @@ class ConverterEngine:
                 return f"{val} kPa = {val / 1000} MPa"
         elif "deg" in query or "radian" in query:
             import math
+
             if "deg to rad" in query:
                 return f"{val}° = {round(math.radians(val), 4)} rad"
             else:

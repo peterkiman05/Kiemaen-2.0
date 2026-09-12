@@ -4,6 +4,7 @@ from fastapi import Request
 
 logger = logging.getLogger("uvicorn.error")
 
+
 async def add_logging_middleware(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
@@ -13,4 +14,3 @@ async def add_logging_middleware(request: Request, call_next):
         f"Status: {response.status_code} | Latency: {duration:.2f}ms"
     )
     return response
-

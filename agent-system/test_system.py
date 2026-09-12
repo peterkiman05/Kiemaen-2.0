@@ -1,6 +1,7 @@
 """
 Automated Test Suite for Multi-Agent Worker-Reviewer System
 """
+
 import time
 import json
 import httpx
@@ -15,23 +16,23 @@ TEST_SUITES = [
         "name": "Scenario 1: Python Algorithm Construction",
         "payload": {
             "task": "Write a Python function to check if a string is a palindrome ignoring case and non-alphanumeric characters.",
-            "max_iterations": 3
-        }
+            "max_iterations": 3,
+        },
     },
     {
         "name": "Scenario 2: Data Structure & Complexity Optimization",
         "payload": {
             "task": "Write an efficient Python function to find two numbers in an array that sum up to a target value (Two Sum problem). Provide O(n) time complexity.",
-            "max_iterations": 2
-        }
+            "max_iterations": 2,
+        },
     },
     {
         "name": "Scenario 3: System Architecture / FastAPI Spec",
         "payload": {
             "task": "Write a FastAPI endpoint with pydantic request validation for a user registration endpoint.",
-            "max_iterations": 3
-        }
-    }
+            "max_iterations": 3,
+        },
+    },
 ]
 
 
@@ -73,7 +74,7 @@ def run_test(scenario: Dict[str, Any], index: int) -> Dict[str, Any]:
                 print(f"    {data.get('review_feedback')}")
                 print("-" * 70)
                 print("  Final Worker Solution Output:")
-                solution_lines = data.get('final_output', '').splitlines()
+                solution_lines = data.get("final_output", "").splitlines()
                 for line in solution_lines[:15]:  # Preview first 15 lines
                     print(f"    {line}")
                 if len(solution_lines) > 15:
@@ -84,7 +85,7 @@ def run_test(scenario: Dict[str, Any], index: int) -> Dict[str, Any]:
                     "passed": True,
                     "status": data.get("status"),
                     "iterations": data.get("iterations_used"),
-                    "time": round(elapsed, 2)
+                    "time": round(elapsed, 2),
                 }
             else:
                 print(f"  FAILED: HTTP {res.status_code} - {res.text}")
@@ -92,7 +93,7 @@ def run_test(scenario: Dict[str, Any], index: int) -> Dict[str, Any]:
                     "name": name,
                     "passed": False,
                     "error": f"HTTP {res.status_code}",
-                    "time": round(elapsed, 2)
+                    "time": round(elapsed, 2),
                 }
 
     except Exception as e:
@@ -102,7 +103,7 @@ def run_test(scenario: Dict[str, Any], index: int) -> Dict[str, Any]:
             "name": name,
             "passed": False,
             "error": str(e),
-            "time": round(elapsed, 2)
+            "time": round(elapsed, 2),
         }
 
 
@@ -111,7 +112,9 @@ def main():
     print("Checking backend server health...")
 
     if not check_health():
-        print(" [ERROR] Backend FastAPI server is not reachable at http://localhost:8000/")
+        print(
+            " [ERROR] Backend FastAPI server is not reachable at http://localhost:8000/"
+        )
         print("         Please start the server first in another Termux session using:")
         print("         uvicorn main:app --reload --host 0.0.0.0 --port 8000")
         return
@@ -126,7 +129,9 @@ def main():
 
     # Print Summary Report Table
     print_banner("SUMMARY TEST REPORT", "#")
-    print(f"{'No.':<4} | {'Scenario Name':<42} | {'Status':<10} | {'Iters':<6} | {'Time (s)':<8}")
+    print(
+        f"{'No.':<4} | {'Scenario Name':<42} | {'Status':<10} | {'Iters':<6} | {'Time (s)':<8}"
+    )
     print("-" * 78)
 
     passed_count = 0
@@ -136,10 +141,14 @@ def main():
             passed_count += 1
         iters_str = str(res.get("iterations", "N/A"))
         time_str = f"{res.get('time', 0.0):.2f}"
-        print(f"{idx:<4} | {res['name']:<42} | {status_str:<10} | {iters_str:<6} | {time_str:<8}")
+        print(
+            f"{idx:<4} | {res['name']:<42} | {status_str:<10} | {iters_str:<6} | {time_str:<8}"
+        )
 
     print("-" * 78)
-    print(f"Total Tests Executed: {len(TEST_SUITES)} | Passed: {passed_count} | Failed: {len(TEST_SUITES) - passed_count}")
+    print(
+        f"Total Tests Executed: {len(TEST_SUITES)} | Passed: {passed_count} | Failed: {len(TEST_SUITES) - passed_count}"
+    )
     print("#" * 78)
 
 

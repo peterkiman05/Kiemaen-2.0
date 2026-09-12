@@ -4,15 +4,19 @@ import os, requests
 
 app = FastAPI()
 
+
 class ChatRequest(BaseModel):
     message: str
+
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+
 @app.get("/")
 def home():
     return {"status": "JARVIS Server Online"}
+
 
 @app.post("/chat")
 def chat(payload: ChatRequest):
@@ -21,15 +25,18 @@ def chat(payload: ChatRequest):
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
-    
+
     data = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
-            {"role": "system", "content": "You are JARVIS, an advanced voice AI assistant."},
-            {"role": "user", "content": payload.message}
-        ]
+            {
+                "role": "system",
+                "content": "You are JARVIS, an advanced voice AI assistant.",
+            },
+            {"role": "user", "content": payload.message},
+        ],
     }
 
     try:

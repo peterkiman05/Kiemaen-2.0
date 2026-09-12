@@ -5,6 +5,7 @@ import json
 import traceback
 from concurrent.futures import ProcessPoolExecutor, TimeoutError
 
+
 def _worker_exec(code_string: str):
     old_stdout = sys.stdout
     redirected_output = io.StringIO()
@@ -17,11 +18,25 @@ def _worker_exec(code_string: str):
 
         safe_globals = {
             "__builtins__": {
-                "abs": abs, "all": all, "any": any, "bool": bool,
-                "dict": dict, "enumerate": enumerate, "float": float,
-                "int": int, "len": len, "list": list, "map": map,
-                "max": max, "min": min, "print": print, "range": range,
-                "set": set, "str": str, "sum": sum, "tuple": tuple,
+                "abs": abs,
+                "all": all,
+                "any": any,
+                "bool": bool,
+                "dict": dict,
+                "enumerate": enumerate,
+                "float": float,
+                "int": int,
+                "len": len,
+                "list": list,
+                "map": map,
+                "max": max,
+                "min": min,
+                "print": print,
+                "range": range,
+                "set": set,
+                "str": str,
+                "sum": sum,
+                "tuple": tuple,
                 "zip": zip,
             },
             "math": math,
@@ -39,6 +54,7 @@ def _worker_exec(code_string: str):
 
     return status, output if output else "Executed successfully with no output."
 
+
 def execute_python(code_string: str, timeout_seconds: int = 5):
     with ProcessPoolExecutor(max_workers=1) as executor:
         future = executor.submit(_worker_exec, code_string)
@@ -51,7 +67,4 @@ def execute_python(code_string: str, timeout_seconds: int = 5):
             status = "error"
             output = str(e)
 
-    return {
-        "status": status,
-        "output": output
-    }
+    return {"status": status, "output": output}

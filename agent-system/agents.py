@@ -16,7 +16,7 @@ def call_ollama(prompt: str) -> str:
         "format": "json",
         "options": {
             "num_predict": 256  # Limits response token length to speed up CPU generation
-        }
+        },
     }
     try:
         # Timeout extended to 180 seconds for Termux CPU execution
@@ -24,12 +24,14 @@ def call_ollama(prompt: str) -> str:
         response.raise_for_status()
         return response.json().get("response", "")
     except Exception as e:
-        return json.dumps({
-            "solution": "Error: Ollama connection timed out or failed.",
-            "explanation": f"Detail: {str(e)}",
-            "status": "REJECTED",
-            "feedback": "Ollama request timed out."
-        })
+        return json.dumps(
+            {
+                "solution": "Error: Ollama connection timed out or failed.",
+                "explanation": f"Detail: {str(e)}",
+                "status": "REJECTED",
+                "feedback": "Ollama request timed out.",
+            }
+        )
 
 
 def worker_node(state: AgentState) -> Dict[str, Any]:
@@ -55,10 +57,7 @@ def worker_node(state: AgentState) -> Dict[str, Any]:
     except Exception:
         solution = raw_response
 
-    return {
-        "worker_output": solution,
-        "iteration": iteration
-    }
+    return {"worker_output": solution, "iteration": iteration}
 
 
 def reviewer_node(state: AgentState) -> Dict[str, Any]:
@@ -82,7 +81,4 @@ def reviewer_node(state: AgentState) -> Dict[str, Any]:
         status = "APPROVED"
         feedback = "Automated fallback pass."
 
-    return {
-        "review_status": status,
-        "feedback": feedback
-    }
+    return {"review_status": status, "feedback": feedback}

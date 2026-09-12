@@ -1,9 +1,9 @@
 import os
 import sys
 
-print("="*60)
+print("=" * 60)
 print("EXECUTING PRE-PUBLISH BLUEPRINT STAGES")
-print("="*60)
+print("=" * 60)
 
 # ---------------------------------------------------------
 # STAGE 1: Sandbox Execution Timeout Protection
@@ -11,7 +11,7 @@ print("="*60)
 print("\n[STAGE 1] Adding 5-second Execution Timeout to core/code_engine.py...")
 
 with open("core/code_engine.py", "w") as f:
-    f.write('''import io
+    f.write("""import io
 import sys
 import math
 import json
@@ -70,7 +70,7 @@ def execute_python(code_string: str, timeout_seconds: int = 5):
         "status": status,
         "output": output if output else "Executed successfully with no output."
     }
-''')
+""")
 
 print("✓ Timeout protection injected into core/code_engine.py.")
 
@@ -80,7 +80,7 @@ print("✓ Timeout protection injected into core/code_engine.py.")
 print("\n[STAGE 2] Building Secure Production FastAPI Router (core/router.py)...")
 
 with open("core/router.py", "w") as f:
-    f.write('''from fastapi import FastAPI, Header, HTTPException, Depends, Security
+    f.write("""from fastapi import FastAPI, Header, HTTPException, Depends, Security
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from core.code_engine import execute_python
@@ -113,7 +113,7 @@ def run_code_engine(request: ExecutionRequest, api_key: str = Depends(verify_api
         "status": result["status"],
         "result": result["output"]
     }
-''')
+""")
 
 print("✓ API Authentication and /health endpoint injected into core/router.py.")
 
@@ -123,7 +123,7 @@ print("✓ API Authentication and /health endpoint injected into core/router.py.
 print("\n[STAGE 3] Creating Production Launcher Script (start_production.sh)...")
 
 with open("start_production.sh", "w") as f:
-    f.write('''#!/bin/bash
+    f.write("""#!/bin/bash
 export PYTHONDONTWRITEBYTECODE=1
 
 echo "Starting Production Agent Framework Service in Background..."
@@ -132,11 +132,11 @@ echo $! > server.pid
 
 echo "Service successfully started with PID $(cat server.pid)."
 echo "Logs streaming to server.log"
-''')
+""")
 
 os.system("chmod +x start_production.sh")
 print("✓ Created start_production.sh launcher.")
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("ALL MISSING PUBLISHING PHASES BUILT SUCCESSFULLY!")
-print("="*60)
+print("=" * 60)

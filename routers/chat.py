@@ -5,9 +5,11 @@ import ollama
 
 router = APIRouter()
 
+
 class ChatRequest(BaseModel):
     prompt: str
     history: List[Dict[str, str]] = []
+
 
 @router.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):

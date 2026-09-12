@@ -3,6 +3,7 @@ from pathlib import Path
 
 TASKS_FILE = Path("kiemaen_tasks.json")
 
+
 class TaskEngine:
     @staticmethod
     def add_task(task_description: str):
