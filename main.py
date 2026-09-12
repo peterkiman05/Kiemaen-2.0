@@ -1,3 +1,7 @@
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
 import os
 import io
 import sqlite3
@@ -772,3 +776,29 @@ async def chat_completions(req: ChatRequest):
             return {"reply": reply}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str
+
+@app.post("/api/auth/google")
+async def verify_google_auth(req: GoogleAuthRequest):
+    try:
+        # Verify the Google JWT ID token securely
+        idinfo = id_token.verify_oauth2_token(
+            req.credential, google_requests.Request()
+        )
+        
+        user_email = idinfo.get("email")
+        user_name = idinfo.get("name")
+        user_id = idinfo.get("sub")
+        
+        return {
+            "status": "success",
+            "message": "User authenticated successfully",
+            "email": user_email,
+            "name": user_name,
+            "sub": user_id
+        }
+    except ValueError as e:
+        return {"status": "error", "message": f"Invalid token: {str(e)}"}
