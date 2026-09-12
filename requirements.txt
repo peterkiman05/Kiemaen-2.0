@@ -76,3 +76,4 @@ zstandard==0.25.0
 pytest
 pytest-asyncio
 aiosqlite
+gtts
