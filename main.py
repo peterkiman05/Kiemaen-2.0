@@ -57,6 +57,11 @@ async def get_history():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/v1/chat/completions")
+
+class ChatRequest(BaseModel):
+    prompt: str
+    persona: str = "tactical"
+
 async def chat_completions(message: str = Form(...), persona: str = Form("tactical"), file: UploadFile = File(None)):
     try:
         api_key = os.environ.get("GROQ_API_KEY")
@@ -705,6 +710,11 @@ async def chat_ui():
     """
 
 @app.post("/v1/chat/completions")
+
+class ChatRequest(BaseModel):
+    prompt: str
+    persona: str = "tactical"
+
 async def chat_completions(req: ChatRequest):
     user_msg = req.message.strip()
 
