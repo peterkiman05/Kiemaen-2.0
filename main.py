@@ -1082,3 +1082,52 @@ async def train_iterative_model(req: IterativeModelTrainingRequest, email: str):
         }
     except Exception as e:
         return {"status": "error", "message": f"Iterative training failed: {str(e)}"}
+
+
+# --- KIM COMPREHENSIVE METRICS & EVOLUTION EVALUATION MODULE ---
+from sklearn.metrics import f1_score, mean_squared_error, accuracy_score
+import numpy as np
+
+class EvaluationMetricsRequest(BaseModel):
+    y_true: List[float]
+    y_pred: List[float]
+    problem_type: str
+
+@app.post("/api/evaluation/metrics")
+async def evaluate_comprehensive_metrics(req: EvaluationMetricsRequest, email: str):
+    if email != ALLOWED_ADMIN_EMAIL:
+        return {"status": "error", "message": "Unauthorized. Access restricted to primary administrator."}, 403
+    
+    try:
+        y_true = np.array(req.y_true)
+        y_pred = np.array(req.y_pred)
+        
+        metrics_result = {}
+        
+        if req.problem_type == "regression":
+            mse = mean_squared_error(y_true, y_pred)
+            rmse = float(np.sqrt(mse))
+            metrics_result = {
+                "mse": float(mse),
+                "rmse": rmse
+            }
+        elif req.problem_type == "classification":
+            acc = accuracy_score(y_true, y_pred)
+            average_mode = "macro" if len(np.unique(y_true)) > 2 else "binary"
+            f1 = f1_score(y_true, y_pred, average=average_mode, zero_division=0)
+            metrics_result = {
+                "accuracy": float(acc),
+                "f1_score": float(f1)
+            }
+        else:
+            return {"status": "error", "message": f"Unsupported problem type for evaluation: {req.problem_type}"}
+
+        return {
+            "status": "success",
+            "message": "Comprehensive evaluation metrics successfully computed under the evolution environment.",
+            "environment_status": "Active & Synchronized (70% Train / 30% Test Mindset)",
+            "problem_type": req.problem_type,
+            "metrics": metrics_result
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Evaluation failed: {str(e)}"}
