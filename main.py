@@ -1131,3 +1131,79 @@ async def evaluate_comprehensive_metrics(req: EvaluationMetricsRequest, email: s
         }
     except Exception as e:
         return {"status": "error", "message": f"Evaluation failed: {str(e)}"}
+
+
+# --- KIM HYPERPARAMETER FINE-TUNING & OPTIMIZATION MODULE ---
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.linear_model import SGDRegressor, SGDClassifier
+from sklearn.tree import DecisionTreeClassifier
+
+class FineTuneRequest(BaseModel):
+    csv_data: Optional[str] = None
+    target_column: str
+    model_type: str = "sgd"  # sgd, tree
+    search_type: str = "random"  # grid, random
+    n_iter_search: int = 10
+
+@app.post("/api/ml/fine-tune")
+async def fine_tune_model(req: FineTuneRequest, email: str):
+    if email != ALLOWED_ADMIN_EMAIL:
+        return {"status": "error", "message": "Unauthorized. Access restricted to primary administrator."}, 403
+    
+    try:
+        if not req.csv_data:
+            return {"status": "error", "message": "No CSV data provided for fine-tuning."}
+            
+        df = pd.read_csv(io.StringIO(req.csv_data))
+        
+        if req.target_column not in df.columns:
+            return {"status": "error", "message": f"Target column '{req.target_column}' not found in dataset."}
+
+        X = df.drop(columns=[req.target_column])
+        y = df[req.target_column]
+
+        is_classification = y.dtype == object or y.nunique() < 10
+
+        if req.model_type == "sgd":
+            if is_classification:
+                model = SGDClassifier(random_state=42)
+                param_dist = {
+                    "alpha": [0.0001, 0.001, 0.01, 0.1],
+                    "eta0": [0.001, 0.01, 0.1, 1.0],
+                    "penalty": ["l2", "l1", "elasticnet"]
+                }
+            else:
+                model = SGDRegressor(random_state=42)
+                param_dist = {
+                    "alpha": [0.0001, 0.001, 0.01, 0.1],
+                    "eta0": [0.001, 0.01, 0.1, 1.0],
+                    "penalty": ["l2", "l1", "elasticnet"]
+                }
+        else:
+            if is_classification:
+                model = DecisionTreeClassifier(random_state=42)
+                param_dist = {
+                    "max_depth": [3, 5, 10, None],
+                    "min_samples_split": [2, 5, 10],
+                    "criterion": ["gini", "entropy"]
+                }
+            else:
+                return {"status": "error", "message": "Decision Tree regression not supported for fine-tuning. Use 'sgd'."}
+
+        if req.search_type == "grid":
+            search = GridSearchCV(estimator=model, param_grid=param_dist, cv=3, n_jobs=-1)
+        else:
+            search = RandomizedSearchCV(estimator=model, param_distributions=param_dist, n_iter=req.n_iter_search, cv=3, random_state=42, n_jobs=-1)
+
+        search.fit(X, y)
+
+        return {
+            "status": "success",
+            "message": f"Successfully fine-tuned hyperparameters using [{req.search_type.upper()}] search.",
+            "best_parameters": search.best_params_,
+            "best_score": float(search.best_score_),
+            "model_type": req.model_type,
+            "problem_type": "classification" if is_classification else "regression"
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Fine-tuning failed: {str(e)}"}
