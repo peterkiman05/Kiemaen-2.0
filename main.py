@@ -939,3 +939,73 @@ async def validate_performance(review_type: str, email: str):
         },
         "message": f"Successfully executed {review_type} performance validation under the 70/30 dual-mindset framework."
     }
+
+
+# --- KIM MACHINE LEARNING & PREDICTIVE MODELING MODULE ---
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, accuracy_score
+import pandas as pd
+import numpy as np
+from typing import Optional, List, Dict, Any
+
+class ModelTrainingRequest(BaseModel):
+    csv_data: Optional[str] = None
+    target_column: str
+    problem_type: Optional[str] = "auto"
+
+@app.post("/api/ml/train")
+async def train_ml_model(req: ModelTrainingRequest, email: str):
+    if email != ALLOWED_ADMIN_EMAIL:
+        return {"status": "error", "message": "Unauthorized. Access restricted to primary administrator."}, 403
+    
+    try:
+        if not req.csv_data:
+            return {"status": "error", "message": "No CSV data provided for training."}
+            
+        df = pd.read_csv(io.StringIO(req.csv_data))
+        
+        if req.target_column not in df.columns:
+            return {"status": "error", "message": f"Target column '{req.target_column}' not found in dataset."}
+
+        X = df.drop(columns=[req.target_column])
+        y = df[req.target_column]
+
+        detected_type = req.problem_type
+        if detected_type == "auto":
+            if y.dtype == object or y.nunique() < 10:
+                detected_type = "classification"
+            else:
+                detected_type = "regression"
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=42)
+
+        model = None
+        performance_metrics = {}
+
+        if detected_type == "regression":
+            model = LinearRegression()
+            model.fit(X_train, y_train)
+            predictions = model.predict(X_test)
+            mse = mean_squared_error(y_test, predictions)
+            performance_metrics = {"model": "Linear Regression", "mse": float(mse), "rmse": float(np.sqrt(mse))}
+        elif detected_type == "classification":
+            model = DecisionTreeClassifier(random_state=42)
+            model.fit(X_train, y_train)
+            predictions = model.predict(X_test)
+            acc = accuracy_score(y_test, predictions)
+            performance_metrics = {"model": "Decision Tree Classifier", "accuracy": float(acc)}
+        else:
+            return {"status": "error", "message": f"Unsupported or unrecognized problem type: {detected_type}"}
+
+        return {
+            "status": "success",
+            "message": f"Successfully trained model using problem-type selection [{detected_type}] under 70/30 split constraint.",
+            "problem_type_selected": detected_type,
+            "metrics": performance_metrics,
+            "train_samples": len(X_train),
+            "test_samples": len(X_test)
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Model training failed: {str(e)}"}
