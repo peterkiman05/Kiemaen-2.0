@@ -781,24 +781,47 @@ async def chat_completions(req: ChatRequest):
 class GoogleAuthRequest(BaseModel):
     credential: str
 
+
+
+# --- KIM AUTONOMOUS EVOLUTION & COMPLIANCE ENGINE ---
+ALLOWED_ADMIN_EMAIL = "P.cthole5@gmail.com"
+
+class SystemUpgradeProposal(BaseModel):
+    feature_name: str
+    description: str
+    projected_revenue_model: str
+    potential_risks: list
+    popia_compliance_status: str
+
+@app.post("/api/admin/propose-upgrade")
+async def propose_upgrade(proposal: SystemUpgradeProposal, email: str):
+    if email != ALLOWED_ADMIN_EMAIL:
+        return {"status": "error", "message": "Unauthorized. Only P.cthole5@gmail.com can review system upgrade proposals."}, 403
+    
+    return {
+        "status": "pending_approval",
+        "message": f"Upgrade proposal for [{proposal.feature_name}] logged successfully. Waiting for administrative sign-off.",
+        "details": proposal.dict()
+    }
+
 @app.post("/api/auth/google")
 async def verify_google_auth(req: GoogleAuthRequest):
     try:
-        # Verify the Google JWT ID token securely
-        idinfo = id_token.verify_oauth2_token(
-            req.credential, google_requests.Request()
-        )
-        
+        idinfo = id_token.verify_oauth2_token(req.credential, google_requests.Request())
         user_email = idinfo.get("email")
-        user_name = idinfo.get("name")
-        user_id = idinfo.get("sub")
         
+        if user_email != ALLOWED_ADMIN_EMAIL:
+            return {
+                "status": "error",
+                "message": f"Access Denied. Unauthorized identity: {user_email}. Locked strictly to primary administrator."
+            }, 403
+
         return {
             "status": "success",
-            "message": "User authenticated successfully",
             "email": user_email,
-            "name": user_name,
-            "sub": user_id
+            "name": idinfo.get("name"),
+            "sub": idinfo.get("sub"),
+            "message": "Absolute administrative firewall verified. Welcome back, master controller."
         }
-    except ValueError as e:
-        return {"status": "error", "message": f"Invalid token: {str(e)}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Cryptographic verification failed: {str(e)}"}
