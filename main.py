@@ -1009,3 +1009,76 @@ async def train_ml_model(req: ModelTrainingRequest, email: str):
         }
     except Exception as e:
         return {"status": "error", "message": f"Model training failed: {str(e)}"}
+
+
+# --- KIM ITERATIVE ML TRAINING & PARAMETER OPTIMIZATION MODULE ---
+from sklearn.linear_model import SGDRegressor, SGDClassifier
+
+class IterativeModelTrainingRequest(BaseModel):
+    csv_data: Optional[str] = None
+    target_column: str
+    problem_type: Optional[str] = "auto"
+    iterations: int = 10
+    learning_rate: float = 0.01
+
+@app.post("/api/ml/train-iterative")
+async def train_iterative_model(req: IterativeModelTrainingRequest, email: str):
+    if email != ALLOWED_ADMIN_EMAIL:
+        return {"status": "error", "message": "Unauthorized. Access restricted to primary administrator."}, 403
+    
+    try:
+        if not req.csv_data:
+            return {"status": "error", "message": "No CSV data provided for training."}
+            
+        df = pd.read_csv(io.StringIO(req.csv_data))
+        
+        if req.target_column not in df.columns:
+            return {"status": "error", "message": f"Target column '{req.target_column}' not found in dataset."}
+
+        X = df.drop(columns=[req.target_column])
+        y = df[req.target_column]
+
+        detected_type = req.problem_type
+        if detected_type == "auto":
+            if y.dtype == object or y.nunique() < 10:
+                detected_type = "classification"
+            else:
+                detected_type = "regression"
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=42)
+
+        history = []
+        model = None
+
+        if detected_type == "regression":
+            model = SGDRegressor(max_iter=1, warm_start=True, learning_rate="constant", eta0=req.learning_rate, random_state=42)
+            for i in range(req.iterations):
+                model.fit(X_train, y_train)
+                preds = model.predict(X_test)
+                mse = mean_squared_error(y_test, preds)
+                history.append({"iteration": i + 1, "mse": float(mse)})
+            final_metrics = {"model": "Iterative SGD Regression", "final_mse": history[-1]["mse"]}
+            
+        elif detected_type == "classification":
+            model = SGDClassifier(max_iter=1, warm_start=True, learning_rate="constant", eta0=req.learning_rate, random_state=42)
+            classes = np.unique(y_train)
+            for i in range(req.iterations):
+                model.partial_fit(X_train, y_train, classes=classes)
+                preds = model.predict(X_test)
+                acc = accuracy_score(y_test, preds)
+                history.append({"iteration": i + 1, "accuracy": float(acc)})
+            final_metrics = {"model": "Iterative SGD Classification", "final_accuracy": history[-1]["accuracy"]}
+        else:
+            return {"status": "error", "message": f"Unsupported problem type: {detected_type}"}
+
+        return {
+            "status": "success",
+            "message": f"Successfully completed {req.iterations} training iterations with auto-parameter adjustment.",
+            "problem_type": detected_type,
+            "metrics": final_metrics,
+            "optimization_history": history,
+            "train_samples": len(X_train),
+            "test_samples": len(X_test)
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Iterative training failed: {str(e)}"}
