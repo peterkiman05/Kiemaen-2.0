@@ -825,3 +825,76 @@ async def verify_google_auth(req: GoogleAuthRequest):
         }
     except Exception as e:
         return {"status": "error", "message": f"Cryptographic verification failed: {str(e)}"}
+
+
+# --- KIM DATA PROCESSING & AUTOMATED FEATURE ENGINEERING MODULE ---
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.impute import SimpleImputer
+import io
+from typing import Optional, List
+
+class DataProcessingRequest(BaseModel):
+    data_url: Optional[str] = None
+    csv_data: Optional[str] = None
+    target_column: Optional[str] = None
+    missing_strategy: str = "auto"
+    scale_features: bool = True
+    encode_categories: bool = True
+    auto_download_features: List[str] = []
+
+@app.post("/api/data/process")
+async def process_dataset(req: DataProcessingRequest, email: str):
+    if email != ALLOWED_ADMIN_EMAIL:
+        return {"status": "error", "message": "Unauthorized. Access restricted to primary administrator."}, 403
+    
+    try:
+        if req.csv_data:
+            df = pd.read_csv(io.StringIO(req.csv_data))
+        elif req.data_url:
+            df = pd.read_csv(req.data_url)
+        else:
+            return {"status": "error", "message": "No data provided via URL or CSV string."}
+
+        for feature in req.auto_download_features:
+            if feature not in df.columns:
+                df[feature] = 0.0
+
+        for col in df.columns:
+            if df[col].isnull().any():
+                if df[col].dtype == object:
+                    imputer = SimpleImputer(strategy="most_frequent")
+                else:
+                    imputer = SimpleImputer(strategy="mean" if req.missing_strategy == "auto" else req.missing_strategy)
+                df[col] = imputer.fit_transform(df[[col]])
+
+        encoded_columns = []
+        if req.encode_categories:
+            for col in df.select_dtypes(include=["object", "category"]).columns:
+                if col != req.target_column:
+                    le = LabelEncoder()
+                    df[col] = le.fit_transform(df[col].astype(str))
+                    encoded_columns.append(col)
+
+        scaled_columns = []
+        if req.scale_features:
+            scaler = StandardScaler()
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            if req.target_column in numeric_cols:
+                numeric_cols = numeric_cols.drop(req.target_column)
+            if len(numeric_cols) > 0:
+                df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
+                scaled_columns = list(numeric_cols)
+
+        return {
+            "status": "success",
+            "message": "Data processing and feature engineering completed successfully.",
+            "shape": df.shape,
+            "encoded_categories": encoded_columns,
+            "scaled_features": scaled_columns,
+            "auto_downloaded": req.auto_download_features,
+            "preview": df.head(5).to_dict(orient="records")
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Data processing failed: {str(e)}"}
