@@ -1265,3 +1265,98 @@ services:
         }
     except Exception as e:
         return {"status": "error", "message": f"Production deployment failed: {str(e)}"}
+
+
+# --- KIM DEEP LEARNING, NEURAL NETWORKS & NLP ENGINE ---
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LogisticRegression
+
+class NeuralNetworkTrainingRequest(BaseModel):
+    csv_data: Optional[str] = None
+    target_column: str
+    hidden_layer_sizes: List[int] = [64, 32]
+    max_iter: int = 200
+
+class NLPProcessingRequest(BaseModel):
+    texts: List[str]
+    labels: Optional[List[str]] = None
+    task: str = "vectorize"  # vectorize, classify
+
+@app.post("/api/ai/neural-network/train")
+async def train_neural_network(req: NeuralNetworkTrainingRequest, email: str):
+    if email != ALLOWED_ADMIN_EMAIL:
+        return {"status": "error", "message": "Unauthorized. Access restricted to primary administrator."}, 403
+    
+    try:
+        if not req.csv_data:
+            return {"status": "error", "message": "No CSV data provided for neural network training."}
+            
+        df = pd.read_csv(io.StringIO(req.csv_data))
+        
+        if req.target_column not in df.columns:
+            return {"status": "error", "message": f"Target column '{req.target_column}' not found in dataset."}
+
+        X = df.drop(columns=[req.target_column])
+        y = df[req.target_column]
+
+        is_classification = y.dtype == object or y.nunique() < 10
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=42)
+
+        if is_classification:
+            nn_model = MLPClassifier(hidden_layer_sizes=tuple(req.hidden_layer_sizes), max_iter=req.max_iter, random_state=42)
+            nn_model.fit(X_train, y_train.astype(str) if y_train.dtype == object else y_train)
+            preds = nn_model.predict(X_test)
+            acc = accuracy_score(y_test, preds)
+            metrics = {"model": "Deep Neural Network Classifier", "accuracy": float(acc)}
+        else:
+            nn_model = MLPRegressor(hidden_layer_sizes=tuple(req.hidden_layer_sizes), max_iter=req.max_iter, random_state=42)
+            nn_model.fit(X_train, y_train)
+            preds = nn_model.predict(X_test)
+            mse = mean_squared_error(y_test, preds)
+            metrics = {"model": "Deep Neural Network Regressor", "mse": float(mse), "rmse": float(np.sqrt(mse))}
+
+        return {
+            "status": "success",
+            "message": "Deep neural network successfully trained under the 70/30 mindset framework.",
+            "architecture": req.hidden_layer_sizes,
+            "metrics": metrics,
+            "train_samples": len(X_train),
+            "test_samples": len(X_test)
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Neural network training failed: {str(e)}"}
+
+@app.post("/api/ai/nlp/process")
+async def process_nlp_text(req: NLPProcessingRequest, email: str):
+    if email != ALLOWED_ADMIN_EMAIL:
+        return {"status": "error", "message": "Unauthorized. Access restricted to primary administrator."}, 403
+    
+    try:
+        if not req.texts:
+            return {"status": "error", "message": "No texts provided for NLP processing."}
+
+        vectorizer = TfidfVectorizer(max_features=1000, stop_words="english")
+        tfidf_matrix = vectorizer.fit_transform(req.texts)
+
+        result_data = {
+            "vocabulary_size": len(vectorizer.get_feature_names_out()),
+            "feature_matrix_shape": tfidf_matrix.shape,
+            "sample_features": list(vectorizer.get_feature_names_out())[:10]
+        }
+
+        if req.task == "classify" and req.labels:
+            X_train, X_test, y_train, y_test = train_test_split(req.texts, req.labels, test_size=0.30, random_state=42)
+            text_pipeline = make_pipeline(TfidfVectorizer(), LogisticRegression())
+            text_pipeline.fit(X_train, y_train)
+            acc = text_pipeline.score(X_test, y_test)
+            result_data["classification_accuracy"] = float(acc)
+
+        return {
+            "status": "success",
+            "message": f"NLP text processing completed successfully for task [{req.task}].",
+            "nlp_results": result_data
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"NLP processing failed: {str(e)}"}
